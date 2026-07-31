@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dailius
 
-## Getting Started
+## AI Life Planner
 
-First, run the development server:
+Dailius helps people make time for what matters.
+
+It is an AI-powered personal planning platform that helps reconcile commitments, goals, activities, and preferences into a realistic weekly plan.
+
+Instead of only answering:
+
+> "What is on my calendar?"
+
+Dailius helps answer:
+
+> "Given everything happening in my life, what should I do and when is the best time to do it?"
+
+---
+
+## Vision
+
+Build an AI Life Operating System that continuously helps people allocate their limited time across:
+
+- Work
+- Family
+- Health and fitness
+- Hobbies
+- Personal goals
+- Projects
+- Everyday responsibilities
+
+---
+
+## MVP
+
+The first version of Dailius focuses on AI-powered personal time planning.
+
+Core features:
+
+- User onboarding
+- Define goals and priorities
+- Define recurring activities
+- Define availability and constraints
+- Generate an optimized weekly plan
+- View plan in a calendar-style interface
+- Chat with AI about the plan
+- Replan when life changes
+
+Example:
+
+> "I missed my Tuesday workout."
+
+Dailius finds the best alternative based on your goals, schedule, preferences, and constraints.
+
+---
+
+## Product Philosophy
+
+Dailius is not another calendar.
+
+Calendars answer:
+
+> "What do I have scheduled?"
+
+Task managers answer:
+
+> "What do I need to do?"
+
+Dailius answers:
+
+> "How should I use my limited time to make progress on what matters?"
+
+---
+
+## Technology Stack
+
+- Next.js
+- React
+- TypeScript
+- Supabase
+- PostgreSQL
+- OpenAI API
+- Vercel
+
+---
+
+## Development
+
+Install dependencies:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+npm install
