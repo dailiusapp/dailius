@@ -8,7 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Dailius is an AI life planner: an AI-powered personal planning platform that reconciles a user's commitments, goals, activities, and preferences into a realistic weekly plan, and lets the user replan conversationally (e.g. "I missed my Tuesday workout").
 
-The repository is currently a fresh Next.js scaffold (App Router, marketing landing page only in `app/page.tsx` / `app/layout.tsx`). None of the product features described in `docs/` (auth, planning engine, database, AI chat) are implemented yet — `docs/` describes where the product is going, not what exists in code today. Before implementing a feature, read the relevant doc(s) below rather than assuming behavior.
+The repository currently has a polished marketing/waitlist landing page (`app/page.tsx` plus the section components in `components/landing/`) and nothing beyond that — no auth, planning engine, database, or AI chat exist yet. `docs/` describes where the product is going, not what exists in code today. Before implementing a product feature, read the relevant doc(s) below rather than assuming behavior.
+
+The waitlist form (`components/landing/WaitlistForm.tsx`) has no backend: it opens a pre-filled `mailto:` as a stopgap. Wiring real capture (Supabase table or API route) is an open follow-up before the page gets real traffic.
 
 ## Commands
 
@@ -65,13 +67,13 @@ REST-ish, noun-based resources (`GET /activities`, not `/getActivities`), consis
 
 ### Frontend organization (docs/component-architecture.md, docs/coding-standards.md)
 
-Preferred (not yet present) folder structure:
+Preferred folder structure — `app/`, `components/`, and `lib/` exist today (landing page only); `features/`, `services/`, `hooks/`, `types/` don't exist yet and should be added when the first real feature (e.g. onboarding, planning) lands:
 
 ```
 app/          routes and pages
-components/   reusable, presentation-only UI
+components/   reusable, presentation-only UI (currently components/landing/ — marketing page sections)
 features/     product-specific functionality (business workflows, domain logic), organized per-feature (e.g. features/planner/{components,hooks,services,types})
-lib/          shared utilities
+lib/          shared utilities (currently just cn.ts and constants.ts)
 services/     DB access, external API calls, AI communication — the only layer that talks to the database
 hooks/        React hooks
 types/        shared TypeScript types
