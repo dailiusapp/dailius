@@ -205,15 +205,6 @@ export function MailIcon(props: IconProps) {
   );
 }
 
-export function CodeIcon(props: IconProps) {
-  return (
-    <svg {...base} {...props}>
-      <polyline points="8,6 3,12 8,18" />
-      <polyline points="16,6 21,12 16,18" />
-    </svg>
-  );
-}
-
 export function SparkleIcon(props: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>

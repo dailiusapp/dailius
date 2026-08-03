@@ -1,5 +1,4 @@
-export const CONTACT_EMAIL = "dailiusapp@gmail.com";
-export const GITHUB_URL = "https://github.com/dailiusapp/dailius";
+export const CONTACT_EMAIL = "beta@dailius.com";
 
 // Prefixed with "/" so these still resolve correctly from other routes
 // (e.g. /privacy), not just from the homepage itself.

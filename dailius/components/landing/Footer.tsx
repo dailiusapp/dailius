@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { CONTACT_EMAIL, GITHUB_URL } from "@/lib/constants";
-import { CodeIcon, MailIcon } from "./icons";
+import { CONTACT_EMAIL } from "@/lib/constants";
+import { MailIcon } from "./icons";
 import { Logo } from "./Logo";
 import { Container } from "./ui";
 
@@ -35,17 +35,6 @@ export function Footer() {
           <div>
             <p className="text-sm font-semibold text-navy">Connect</p>
             <ul className="mt-3 space-y-2 text-sm text-gray-500">
-              <li>
-                <a
-                  href={GITHUB_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 hover:text-navy"
-                >
-                  <CodeIcon className="h-4 w-4" />
-                  GitHub
-                </a>
-              </li>
               <li>
                 <a
                   href={`mailto:${CONTACT_EMAIL}`}
