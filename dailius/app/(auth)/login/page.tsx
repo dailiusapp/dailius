@@ -6,7 +6,17 @@ export const metadata: Metadata = {
   description: "Sign in to your Dailius account.",
 };
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
+  const initialError =
+    error === "confirmation_failed"
+      ? "That confirmation link is invalid or has expired. Please sign in, or sign up again."
+      : undefined;
+
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight text-navy">
@@ -17,7 +27,7 @@ export default function LoginPage() {
       </p>
 
       <div className="mt-8">
-        <SignInForm />
+        <SignInForm initialError={initialError} />
       </div>
     </div>
   );

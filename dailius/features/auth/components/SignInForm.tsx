@@ -15,11 +15,11 @@ const validators: Record<keyof SignInInput, (value: string) => string | undefine
 
 const initialValues: SignInInput = { email: "", password: "" };
 
-export function SignInForm() {
+export function SignInForm({ initialError }: { initialError?: string }) {
   const router = useRouter();
   const [values, setValues] = useState<SignInInput>(initialValues);
   const [errors, setErrors] = useState<SignInFieldErrors>({});
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(initialError ?? null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fieldRefs = useRef<Record<keyof SignInInput, HTMLInputElement | null>>({
