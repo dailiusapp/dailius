@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local-only maintenance scripts (destructive, not for the repo)
+/supabase/scripts/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
