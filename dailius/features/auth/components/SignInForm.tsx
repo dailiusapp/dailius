@@ -71,7 +71,7 @@ export function SignInForm({ initialError }: { initialError?: string }) {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(result.redirectTo);
     router.refresh();
   }
 

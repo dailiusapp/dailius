@@ -8,7 +8,7 @@ export async function signIn(input: SignInInput): Promise<SignInResult> {
   const password = input.password;
 
   const supabase = createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
     const message = mapAuthError(error);
@@ -18,7 +18,13 @@ export async function signIn(input: SignInInput): Promise<SignInResult> {
     return { ok: false, message };
   }
 
-  return { ok: true };
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("onboarding_completed")
+    .eq("id", data.user.id)
+    .maybeSingle();
+
+  return { ok: true, redirectTo: profile?.onboarding_completed ? "/dashboard" : "/onboarding" };
 }
 
 function mapAuthError(error: { code?: string; message: string }): string {

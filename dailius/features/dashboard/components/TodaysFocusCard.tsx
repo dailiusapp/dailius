@@ -1,7 +1,7 @@
 import { TargetIcon } from "@/components/landing/icons";
 import { DashboardCard } from "./DashboardCard";
 
-export function TodaysFocusCard() {
+export function TodaysFocusCard({ onboardingCompleted }: { onboardingCompleted: boolean }) {
   return (
     <DashboardCard
       title="Today's Focus"
@@ -9,7 +9,9 @@ export function TodaysFocusCard() {
       tone="accent"
     >
       <p className="text-[15px] leading-6 text-gray-700">
-        Complete onboarding to receive personalized daily recommendations.
+        {onboardingCompleted
+          ? "No personalized recommendation yet — check back once your plan is ready."
+          : "Complete onboarding to receive personalized daily recommendations."}
       </p>
     </DashboardCard>
   );

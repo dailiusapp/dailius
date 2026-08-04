@@ -19,18 +19,21 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const profile = await getProfile(user.id);
   const firstName = profile?.fullName.trim().split(" ")[0] || undefined;
+  const onboardingCompleted = profile?.onboardingCompleted ?? false;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-10 sm:px-8 lg:px-12">
       <WelcomeHeader firstName={firstName} />
 
-      <div className="mt-8">
-        <EmptyUserExperience />
-      </div>
+      {!onboardingCompleted ? (
+        <div className="mt-8">
+          <EmptyUserExperience />
+        </div>
+      ) : null}
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-6">
-          <TodaysFocusCard />
+          <TodaysFocusCard onboardingCompleted={onboardingCompleted} />
           <TodaysOverviewCard />
           <TodaysScheduleCard />
         </div>

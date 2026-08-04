@@ -25,5 +25,5 @@ export type SignInInput = {
 };
 
 export type SignInResult =
-  | { ok: true }
+  | { ok: true; redirectTo: string }
   | { ok: false; message: string; field?: keyof SignInFieldErrors };
