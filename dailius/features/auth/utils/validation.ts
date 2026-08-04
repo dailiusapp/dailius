@@ -23,6 +23,11 @@ export function validatePassword(value: string): string | undefined {
   return undefined;
 }
 
+export function validateLoginPassword(value: string): string | undefined {
+  if (!value) return "Please enter your password.";
+  return undefined;
+}
+
 export function validateSignUpForm(input: {
   fullName: string;
   email: string;

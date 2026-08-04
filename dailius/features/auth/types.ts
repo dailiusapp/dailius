@@ -13,3 +13,17 @@ export type SignUpInput = {
 export type SignUpResult =
   | { ok: true }
   | { ok: false; message: string; field?: keyof SignUpFieldErrors };
+
+export type SignInFieldErrors = {
+  email?: string;
+  password?: string;
+};
+
+export type SignInInput = {
+  email: string;
+  password: string;
+};
+
+export type SignInResult =
+  | { ok: true }
+  | { ok: false; message: string; field?: keyof SignInFieldErrors };
