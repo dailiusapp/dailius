@@ -61,6 +61,7 @@ export async function completeOnboarding(data: OnboardingData): Promise<void> {
       .insert({
         user_id: user.id,
         name: goal.label,
+        default_duration_minutes: 30,
         preferred_frequency: goal.frequency,
       })
       .select("id")
@@ -81,6 +82,7 @@ export async function completeOnboarding(data: OnboardingData): Promise<void> {
         default_duration_minutes: activity.durationMinutes,
         preferred_days: activity.preferredDays,
         preferred_time_of_day: activity.preferredTimeOfDay,
+        flexible: activity.flexible,
         enabled: true,
       })),
     );
@@ -90,12 +92,18 @@ export async function completeOnboarding(data: OnboardingData): Promise<void> {
   const availability = data.availability;
   const { error: availabilityError } = await supabase.from("availability").upsert({
     user_id: user.id,
-    weekday_morning: availability.weekdayMorning,
-    weekday_afternoon: availability.weekdayAfternoon,
-    weekday_evening: availability.weekdayEvening,
-    weekend_morning: availability.weekendMorning,
-    weekend_afternoon: availability.weekendAfternoon,
-    weekend_evening: availability.weekendEvening,
+    weekday_morning_start: availability.weekdayMorning?.start ?? null,
+    weekday_morning_end: availability.weekdayMorning?.end ?? null,
+    weekday_afternoon_start: availability.weekdayAfternoon?.start ?? null,
+    weekday_afternoon_end: availability.weekdayAfternoon?.end ?? null,
+    weekday_evening_start: availability.weekdayEvening?.start ?? null,
+    weekday_evening_end: availability.weekdayEvening?.end ?? null,
+    weekend_morning_start: availability.weekendMorning?.start ?? null,
+    weekend_morning_end: availability.weekendMorning?.end ?? null,
+    weekend_afternoon_start: availability.weekendAfternoon?.start ?? null,
+    weekend_afternoon_end: availability.weekendAfternoon?.end ?? null,
+    weekend_evening_start: availability.weekendEvening?.start ?? null,
+    weekend_evening_end: availability.weekendEvening?.end ?? null,
     max_daily_planning_minutes: availability.maxDailyPlanningMinutes,
     updated_at: new Date().toISOString(),
   });

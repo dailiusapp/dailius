@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/cn";
-import type { Availability } from "../types";
+import type { Availability, TimeRange } from "../types";
 import { PrimaryButton, SecondaryButton } from "./buttons";
 import { StepFooter, StepShell } from "./StepShell";
 
@@ -12,6 +12,23 @@ const MAX_TIME_OPTIONS = [
   { value: 60, label: "1 hour" },
   { value: 120, label: "2 hours" },
 ];
+
+type BlockKey =
+  | "weekdayMorning"
+  | "weekdayAfternoon"
+  | "weekdayEvening"
+  | "weekendMorning"
+  | "weekendAfternoon"
+  | "weekendEvening";
+
+const DEFAULT_AVAILABILITY_WINDOWS: Record<BlockKey, TimeRange> = {
+  weekdayMorning: { start: "06:00", end: "12:00" },
+  weekdayAfternoon: { start: "12:00", end: "17:00" },
+  weekdayEvening: { start: "17:00", end: "21:00" },
+  weekendMorning: { start: "06:00", end: "12:00" },
+  weekendAfternoon: { start: "12:00", end: "17:00" },
+  weekendEvening: { start: "17:00", end: "21:00" },
+};
 
 function Toggle({
   label,
@@ -39,6 +56,53 @@ function Toggle({
   );
 }
 
+function BlockRow({
+  label,
+  blockKey,
+  range,
+  onChange,
+}: {
+  label: string;
+  blockKey: BlockKey;
+  range: TimeRange | null;
+  onChange: (range: TimeRange | null) => void;
+}) {
+  const invalid = range !== null && range.end <= range.start;
+
+  return (
+    <div>
+      <Toggle
+        label={label}
+        checked={range !== null}
+        onChange={(checked) => onChange(checked ? DEFAULT_AVAILABILITY_WINDOWS[blockKey] : null)}
+      />
+      {range ? (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <label className="block text-xs">
+            <span className="text-gray-500">Start</span>
+            <input
+              type="time"
+              value={range.start}
+              onChange={(event) => onChange({ ...range, start: event.target.value })}
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-brand-to focus:outline-none focus:ring-2 focus:ring-brand-to"
+            />
+          </label>
+          <label className="block text-xs">
+            <span className="text-gray-500">End</span>
+            <input
+              type="time"
+              value={range.end}
+              onChange={(event) => onChange({ ...range, end: event.target.value })}
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:border-brand-to focus:outline-none focus:ring-2 focus:ring-brand-to"
+            />
+          </label>
+          {invalid ? <p className="col-span-2 text-xs text-red-600">End time must be after start time.</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function AvailabilityStep({
   availability,
   onBack,
@@ -54,46 +118,63 @@ export function AvailabilityStep({
     setValue((prev) => ({ ...prev, [key]: next }));
   }
 
+  const hasInvalidRange = (
+    [
+      value.weekdayMorning,
+      value.weekdayAfternoon,
+      value.weekdayEvening,
+      value.weekendMorning,
+      value.weekendAfternoon,
+      value.weekendEvening,
+    ] as (TimeRange | null)[]
+  ).some((range) => range !== null && range.end <= range.start);
+
   return (
     <StepShell title="When do you usually have time for flexible activities?">
       <div>
         <p className="text-sm font-semibold text-navy">Weekdays</p>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <Toggle
+        <div className="mt-2 space-y-3">
+          <BlockRow
             label="Morning"
-            checked={value.weekdayMorning}
-            onChange={(v) => set("weekdayMorning", v)}
+            blockKey="weekdayMorning"
+            range={value.weekdayMorning}
+            onChange={(range) => set("weekdayMorning", range)}
           />
-          <Toggle
+          <BlockRow
             label="Afternoon"
-            checked={value.weekdayAfternoon}
-            onChange={(v) => set("weekdayAfternoon", v)}
+            blockKey="weekdayAfternoon"
+            range={value.weekdayAfternoon}
+            onChange={(range) => set("weekdayAfternoon", range)}
           />
-          <Toggle
+          <BlockRow
             label="Evening"
-            checked={value.weekdayEvening}
-            onChange={(v) => set("weekdayEvening", v)}
+            blockKey="weekdayEvening"
+            range={value.weekdayEvening}
+            onChange={(range) => set("weekdayEvening", range)}
           />
         </div>
       </div>
 
       <div className="mt-5">
         <p className="text-sm font-semibold text-navy">Weekends</p>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <Toggle
+        <div className="mt-2 space-y-3">
+          <BlockRow
             label="Morning"
-            checked={value.weekendMorning}
-            onChange={(v) => set("weekendMorning", v)}
+            blockKey="weekendMorning"
+            range={value.weekendMorning}
+            onChange={(range) => set("weekendMorning", range)}
           />
-          <Toggle
+          <BlockRow
             label="Afternoon"
-            checked={value.weekendAfternoon}
-            onChange={(v) => set("weekendAfternoon", v)}
+            blockKey="weekendAfternoon"
+            range={value.weekendAfternoon}
+            onChange={(range) => set("weekendAfternoon", range)}
           />
-          <Toggle
+          <BlockRow
             label="Evening"
-            checked={value.weekendEvening}
-            onChange={(v) => set("weekendEvening", v)}
+            blockKey="weekendEvening"
+            range={value.weekendEvening}
+            onChange={(range) => set("weekendEvening", range)}
           />
         </div>
       </div>
@@ -118,7 +199,9 @@ export function AvailabilityStep({
 
       <StepFooter>
         <SecondaryButton onClick={onBack}>Back</SecondaryButton>
-        <PrimaryButton onClick={() => onNext(value)}>Continue</PrimaryButton>
+        <PrimaryButton onClick={() => onNext(value)} disabled={hasInvalidRange}>
+          Continue
+        </PrimaryButton>
       </StepFooter>
     </StepShell>
   );

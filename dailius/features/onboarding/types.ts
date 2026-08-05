@@ -18,13 +18,15 @@ export type RecurringActivitySelection = {
   flexible: boolean;
 };
 
+export type TimeRange = { start: string; end: string }; // "HH:MM", 24h
+
 export type Availability = {
-  weekdayMorning: boolean;
-  weekdayAfternoon: boolean;
-  weekdayEvening: boolean;
-  weekendMorning: boolean;
-  weekendAfternoon: boolean;
-  weekendEvening: boolean;
+  weekdayMorning: TimeRange | null;
+  weekdayAfternoon: TimeRange | null;
+  weekdayEvening: TimeRange | null;
+  weekendMorning: TimeRange | null;
+  weekendAfternoon: TimeRange | null;
+  weekendEvening: TimeRange | null;
   maxDailyPlanningMinutes: number | null;
 };
 
@@ -50,12 +52,12 @@ export const EMPTY_ONBOARDING_DATA: OnboardingData = {
   goals: [],
   activities: [],
   availability: {
-    weekdayMorning: false,
-    weekdayAfternoon: false,
-    weekdayEvening: false,
-    weekendMorning: false,
-    weekendAfternoon: false,
-    weekendEvening: false,
+    weekdayMorning: null,
+    weekdayAfternoon: null,
+    weekdayEvening: null,
+    weekendMorning: null,
+    weekendAfternoon: null,
+    weekendEvening: null,
     maxDailyPlanningMinutes: null,
   },
   preferences: {

@@ -22,20 +22,20 @@ can't do that step. Once connected, imported events should land in the
 
 ---
 
-# AI Plan Generation
+# Conversational Replanning
 
-**Where:** Onboarding's final "Generate My Plan" step and the dashboard's
-Today's Focus / Today's Overview / Today's Schedule / Weekly Plan Preview
-cards.
+**Where:** Not implemented anywhere in the app. Deterministic plan
+generation (below) is done, but there's no way to ask for changes yet.
 
-**What's missing:** The actual planning engine (`docs/planning-rules.md`,
-`docs/planning-algorithm.md`) and the AI conversation layer
-(`docs/technical-architecture.md`) — neither exists yet. Onboarding
-currently persists the user's goals/activities/availability/preferences/
-constraints for real, then marks `onboarding_completed = true` and sends
-the user to the dashboard without generating an actual `weekly_plan` /
-`scheduled_block` row. The dashboard's plan-dependent cards correctly
-show their spec'd empty states until this exists.
+**What's missing:** The AI conversation layer (`docs/technical-architecture.md`)
+that would let a user say "I missed my Tuesday workout" or "I have to work
+late Wednesday" and get a re-planned schedule back. This needs the
+`/assistant` chat interface plus an OpenAI integration — neither exists.
+The deterministic planning engine (`features/planning/`) that would do the
+actual rescheduling work already exists and can be called again for a
+full regeneration, but nothing translates natural language into a call to
+it yet, and it only ever regenerates the whole week rather than making a
+minimal, targeted change.
 
 ---
 

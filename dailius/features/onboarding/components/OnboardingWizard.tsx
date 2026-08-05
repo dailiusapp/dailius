@@ -3,6 +3,7 @@
 import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveOnboardingProgress, completeOnboarding } from "../services/actions";
+import { generatePlan } from "@/features/planning/services/generatePlan";
 import { TOTAL_STEPS, type OnboardingData } from "../types";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { WelcomeStep } from "./WelcomeStep";
@@ -65,10 +66,16 @@ export function OnboardingWizard({
     setStep(GENERATING);
     try {
       await completeOnboarding(data);
+      const result = await generatePlan();
+      if (!result.ok) {
+        throw new Error(result.message);
+      }
       setStep(COMPLETE);
     } catch (error) {
       console.error("Failed to complete onboarding:", error);
-      setGenerationError("Something went wrong generating your plan. Please try again.");
+      setGenerationError(
+        error instanceof Error ? error.message : "Something went wrong generating your plan. Please try again.",
+      );
       setStep(REVIEW);
     }
   }

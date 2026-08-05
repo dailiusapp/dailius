@@ -1,4 +1,4 @@
-import type { OnboardingData } from "../types";
+import type { OnboardingData, TimeRange } from "../types";
 import { PrimaryButton, SecondaryButton } from "./buttons";
 import { StepFooter, StepShell } from "./StepShell";
 
@@ -48,19 +48,20 @@ export function ReviewStep({
   const activityLines = data.activities.map((activity) => activity.name || activity.label);
 
   const availabilityLines: string[] = [];
-  if (
-    data.availability.weekdayMorning ||
-    data.availability.weekdayAfternoon ||
-    data.availability.weekdayEvening
-  ) {
-    availabilityLines.push("Weekdays available");
-  }
-  if (
-    data.availability.weekendMorning ||
-    data.availability.weekendAfternoon ||
-    data.availability.weekendEvening
-  ) {
-    availabilityLines.push("Weekends available");
+  const weekdayBlocks: [string, TimeRange | null][] = [
+    ["Weekday mornings", data.availability.weekdayMorning],
+    ["Weekday afternoons", data.availability.weekdayAfternoon],
+    ["Weekday evenings", data.availability.weekdayEvening],
+  ];
+  const weekendBlocks: [string, TimeRange | null][] = [
+    ["Weekend mornings", data.availability.weekendMorning],
+    ["Weekend afternoons", data.availability.weekendAfternoon],
+    ["Weekend evenings", data.availability.weekendEvening],
+  ];
+  for (const [label, range] of [...weekdayBlocks, ...weekendBlocks]) {
+    if (range) {
+      availabilityLines.push(`${label} ${formatTime(range.start)}–${formatTime(range.end)}`);
+    }
   }
   if (data.availability.maxDailyPlanningMinutes) {
     availabilityLines.push(`Up to ${data.availability.maxDailyPlanningMinutes} minutes of planning per day`);
