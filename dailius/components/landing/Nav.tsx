@@ -42,7 +42,10 @@ export function Nav() {
           ))}
         </nav>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-3 md:flex">
+          <Button href="/login" variant="ghost" className="px-4 py-2.5 text-sm">
+            Sign In
+          </Button>
           <Button href="/#waitlist" variant="primary" className="px-5 py-2.5 text-sm">
             Join the Waitlist
           </Button>
@@ -79,14 +82,24 @@ export function Nav() {
               </li>
             ))}
           </ul>
-          <Button
-            href="/#waitlist"
-            variant="primary"
-            className="mt-4 w-full"
-            onClick={() => setOpen(false)}
-          >
-            Join the Waitlist
-          </Button>
+          <div className="mt-4 flex flex-col gap-2">
+            <Button
+              href="/login"
+              variant="secondary"
+              className="w-full"
+              onClick={() => setOpen(false)}
+            >
+              Sign In
+            </Button>
+            <Button
+              href="/#waitlist"
+              variant="primary"
+              className="w-full"
+              onClick={() => setOpen(false)}
+            >
+              Join the Waitlist
+            </Button>
+          </div>
         </nav>
       ) : null}
     </header>
