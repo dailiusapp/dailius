@@ -21,6 +21,11 @@ export function toISODate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+export function parseISODate(iso: string): Date {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export function dayOfWeekLabel(date: Date): (typeof DAY_LABELS)[number] {
   return DAY_LABELS[date.getDay()];
 }

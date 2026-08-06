@@ -2,21 +2,8 @@ import { CalendarIcon } from "@/components/landing/icons";
 import { DashboardCard } from "./DashboardCard";
 import { cn } from "@/lib/cn";
 import { formatClockTime } from "@/features/planning/services/dateUtils";
-import type { ScheduledBlock, ScheduledBlockStatus } from "@/features/planning/types";
-
-const STATUS_STYLES: Record<ScheduledBlockStatus, string> = {
-  scheduled: "bg-brand-to/10 text-brand-to",
-  completed: "bg-green-100 text-green-700",
-  missed: "bg-red-100 text-red-700",
-  cancelled: "bg-gray-100 text-gray-500",
-};
-
-const STATUS_LABELS: Record<ScheduledBlockStatus, string> = {
-  scheduled: "Scheduled",
-  completed: "Completed",
-  missed: "Missed",
-  cancelled: "Cancelled",
-};
+import { STATUS_LABELS, STATUS_STYLES } from "@/features/planning/constants";
+import type { ScheduledBlock } from "@/features/planning/types";
 
 export function TodaysScheduleCard({ todaysBlocks }: { todaysBlocks: ScheduledBlock[] }) {
   return (

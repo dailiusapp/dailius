@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CalendarIcon } from "@/components/landing/icons";
 import { DashboardCard } from "./DashboardCard";
-import { toISODate } from "@/features/planning/services/dateUtils";
+import { getWeekStart, toISODate } from "@/features/planning/services/dateUtils";
 import type { WeeklyPlan } from "@/features/planning/types";
 
 const WEEKDAY_FORMATTER = new Intl.DateTimeFormat("en-US", { weekday: "long" });
@@ -27,11 +27,12 @@ export function WeeklyPlanPreviewCard({ plan }: { plan: WeeklyPlan | null }) {
       <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {days.map((date) => {
           const iso = toISODate(date);
+          const weekStart = toISODate(getWeekStart(date));
           const count = plan?.blocks.filter((block) => block.scheduledDate === iso).length ?? 0;
           return (
             <li key={date.toDateString()}>
               <Link
-                href="/weekly-plan"
+                href={`/weekly-plan?week=${weekStart}#day-${iso}`}
                 className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-sm transition-colors hover:border-brand-to/40 hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-to"
               >
                 <span>
