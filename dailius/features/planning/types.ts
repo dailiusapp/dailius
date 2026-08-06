@@ -67,6 +67,16 @@ export type PreferenceInput = {
   value: string;
 };
 
+// Fixed external events (e.g. imported from Google Calendar) the engine
+// must never schedule over. Same-day only — see syncGoogleCalendarEvents.ts
+// for why multi-day/all-day events are excluded before they ever reach here.
+export type CommitmentInput = {
+  title: string;
+  scheduledDate: string;
+  startTime: string;
+  endTime: string;
+};
+
 export type EngineInput = {
   today: Date;
   goals: GoalInput[];
@@ -74,6 +84,7 @@ export type EngineInput = {
   constraints: ConstraintInput[];
   preferences: PreferenceInput[];
   availability: AvailabilityInput;
+  commitments: CommitmentInput[];
 };
 
 export type ScheduledBlockDraft = {

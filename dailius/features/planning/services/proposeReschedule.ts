@@ -63,6 +63,15 @@ export async function proposeReschedule(blockId: string): Promise<ProposeResched
       isExercise: EXERCISE_ACTIVITY_NAMES.has(block.activityName.trim().toLowerCase()),
     }));
   seedExistingBookings(days, otherBookings);
+  seedExistingBookings(
+    days,
+    input.commitments.map((commitment) => ({
+      scheduledDate: commitment.scheduledDate,
+      startTime: commitment.startTime,
+      endTime: commitment.endTime,
+      isExercise: false,
+    })),
+  );
 
   // computeFreeBlocksForWeek's `isPast` is date-only — it has no concept of
   // the current clock time, so today's date is never "past" even mid-day.

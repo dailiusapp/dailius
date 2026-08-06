@@ -39,6 +39,7 @@ export type Preferences = {
 
 export type OnboardingData = {
   calendarSkipped: boolean;
+  calendarConnected: boolean;
   goals: GoalSelection[];
   activities: RecurringActivitySelection[];
   availability: Availability;
@@ -49,6 +50,7 @@ export const TOTAL_STEPS = 6;
 
 export const EMPTY_ONBOARDING_DATA: OnboardingData = {
   calendarSkipped: false,
+  calendarConnected: false,
   goals: [],
   activities: [],
   availability: {

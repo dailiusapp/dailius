@@ -2,6 +2,8 @@
 
 import { requireUser } from "@/features/auth/services/requireUser";
 import { createClient } from "@/lib/supabase/server";
+import { isGoogleCalendarConnected } from "@/features/calendar/services/getConnectionStatus";
+import { syncGoogleCalendarEvents } from "@/features/calendar/services/syncGoogleCalendarEvents";
 import { generateWeeklySchedule } from "./engine";
 import { loadEngineInputs } from "./loadEngineInputs";
 import type { GeneratePlanResult } from "../types";
@@ -11,6 +13,16 @@ const GENERIC_ERROR_MESSAGE = "Something went wrong generating your plan. Please
 export async function generatePlan(): Promise<GeneratePlanResult> {
   const user = await requireUser();
   const supabase = await createClient();
+
+  // Keep commitments fresh right before building off them. A failed sync
+  // (e.g. revoked token) shouldn't block plan generation — fall back to
+  // whatever commitments are already stored.
+  if (await isGoogleCalendarConnected(user.id)) {
+    const syncResult = await syncGoogleCalendarEvents(user.id);
+    if (!syncResult.ok) {
+      console.error("Failed to sync Google Calendar before generating plan:", syncResult.message);
+    }
+  }
 
   const loaded = await loadEngineInputs(user.id);
   if (!loaded.ok) {

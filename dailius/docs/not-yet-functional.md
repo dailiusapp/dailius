@@ -10,18 +10,6 @@ Update this file as new stubs are added or items get resolved.
 
 ---
 
-# Google Calendar Connection
-
-**Where:** Onboarding Step 1 ("Connect Google Calendar" button, disabled/"coming soon").
-
-**What's missing:** Real Google OAuth — a Google Cloud project, OAuth
-consent screen, redirect URI, calendar scope, and a way to store/refresh
-tokens. Requires the user to create the Google Cloud credentials; Claude
-can't do that step. Once connected, imported events should land in the
-`commitments` table with `source = 'Google Calendar'`.
-
----
-
 # Conversational Replanning (partial)
 
 **Where:** `/assistant` — a real chat interface backed by an OpenAI

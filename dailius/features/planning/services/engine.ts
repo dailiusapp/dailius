@@ -451,6 +451,15 @@ export function placeActivities(
 
 export function generateWeeklySchedule(input: EngineInput): EngineResult {
   const days = computeFreeBlocksForWeek(input);
+  seedExistingBookings(
+    days,
+    input.commitments.map((commitment) => ({
+      scheduledDate: commitment.scheduledDate,
+      startTime: commitment.startTime,
+      endTime: commitment.endTime,
+      isExercise: false,
+    })),
+  );
   const resolvedActivities = prioritizeActivities(input);
   const { blocks, unplacedCount } = placeActivities(input, days, resolvedActivities);
 

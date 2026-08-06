@@ -3,7 +3,7 @@
 import { requireUser } from "@/features/auth/services/requireUser";
 import { createClient } from "@/lib/supabase/server";
 import type { ScheduledBlock, ScheduledBlockDraft } from "../types";
-import { timeToMinutes } from "./dateUtils";
+import { addDays, parseISODate, timeFromDate, timeToMinutes } from "./dateUtils";
 import { getCurrentPlan } from "./getCurrentPlan";
 
 const GENERIC_ERROR_MESSAGE = "Something went wrong rescheduling that activity. Please try again.";
@@ -52,6 +52,33 @@ export async function confirmReschedule(
   });
 
   if (conflict) {
+    return { ok: false, message: "That time is no longer available. Please ask again for updated options." };
+  }
+
+  // Same "never trust the client-echoed proposal" principle applied above
+  // against other scheduled blocks — also re-check against commitments
+  // (e.g. a Google Calendar event synced in between propose and confirm).
+  const dayStart = parseISODate(chosenOption.scheduledDate);
+  const dayEnd = addDays(dayStart, 1);
+  const { data: commitmentRows, error: commitmentsError } = await supabase
+    .from("commitments")
+    .select("start_time, end_time")
+    .eq("user_id", user.id)
+    .gte("start_time", dayStart.toISOString())
+    .lt("start_time", dayEnd.toISOString());
+
+  if (commitmentsError) {
+    console.error("Failed to check commitments before confirming reschedule:", commitmentsError);
+    return { ok: false, message: GENERIC_ERROR_MESSAGE };
+  }
+
+  const commitmentConflict = (commitmentRows ?? []).some((row) => {
+    const existingStart = timeToMinutes(timeFromDate(new Date(row.start_time)));
+    const existingEnd = timeToMinutes(timeFromDate(new Date(row.end_time)));
+    return existingStart < chosenEnd && chosenStart < existingEnd;
+  });
+
+  if (commitmentConflict) {
     return { ok: false, message: "That time is no longer available. Please ask again for updated options." };
   }
 

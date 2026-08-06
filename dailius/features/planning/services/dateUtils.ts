@@ -46,6 +46,15 @@ export function minutesToTime(minutes: number): string {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+// Extracts "HH:MM" from a Date's local hours/minutes — used to turn a
+// commitment's timestamptz start/end into the same clock-time
+// representation the engine already uses everywhere else. Server-local
+// time, same simplification as `today: new Date()` elsewhere in the
+// engine — no per-user timezone handling exists yet.
+export function timeFromDate(date: Date): string {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 export function formatClockTime(time: string): string {
   const [hourStr, minuteStr] = time.split(":");
   const hour = Number(hourStr);

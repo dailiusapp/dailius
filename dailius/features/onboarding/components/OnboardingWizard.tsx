@@ -29,9 +29,11 @@ const COMPLETE = 8;
 export function OnboardingWizard({
   initialStep,
   initialData,
+  googleCalendarError,
 }: {
   initialStep: number;
   initialData: OnboardingData;
+  googleCalendarError: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(initialStep);
@@ -90,7 +92,13 @@ export function OnboardingWizard({
 
       {step === WELCOME ? <WelcomeStep onNext={() => advance()} /> : null}
 
-      {step === CALENDAR ? <CalendarStep onNext={() => advance({ calendarSkipped: true })} /> : null}
+      {step === CALENDAR ? (
+        <CalendarStep
+          connected={data.calendarConnected}
+          error={googleCalendarError}
+          onNext={() => advance(data.calendarConnected ? undefined : { calendarSkipped: true })}
+        />
+      ) : null}
 
       {step === GOALS ? (
         <GoalsStep goals={data.goals} onBack={goBack} onNext={(goals) => advance({ goals })} />

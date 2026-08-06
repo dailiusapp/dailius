@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import type { ActivityInput, AvailabilityInput, EngineInput, GoalInput } from "../types";
+import type { ActivityInput, AvailabilityInput, CommitmentInput, EngineInput, GoalInput } from "../types";
+import { addDays, getWeekStart, timeFromDate, toISODate } from "./dateUtils";
 
 const GENERIC_ERROR_MESSAGE = "Something went wrong loading your planning data. Please try again.";
 
@@ -8,27 +9,37 @@ export async function loadEngineInputs(
 ): Promise<{ ok: true; input: EngineInput } | { ok: false; message: string }> {
   const supabase = await createClient();
 
-  const [goalsRes, activitiesRes, constraintsRes, preferencesRes, availabilityRes] = await Promise.all([
-    supabase.from("goals").select("id, title, priority").eq("user_id", userId).eq("status", "active"),
-    supabase
-      .from("activities")
-      .select(
-        "id, name, default_duration_minutes, preferred_frequency, preferred_days, preferred_time_of_day, minimum_duration_minutes, maximum_duration_minutes, flexible",
-      )
-      .eq("user_id", userId)
-      .eq("enabled", true),
-    supabase.from("scheduling_constraints").select("type, value").eq("user_id", userId).eq("enabled", true),
-    supabase.from("preferences").select("type, value").eq("user_id", userId),
-    supabase
-      .from("availability")
-      .select(
-        "weekday_morning_start, weekday_morning_end, weekday_afternoon_start, weekday_afternoon_end, weekday_evening_start, weekday_evening_end, weekend_morning_start, weekend_morning_end, weekend_afternoon_start, weekend_afternoon_end, weekend_evening_start, weekend_evening_end, max_daily_planning_minutes",
-      )
-      .eq("user_id", userId)
-      .maybeSingle(),
-  ]);
+  const weekStart = getWeekStart(new Date());
+  const weekEnd = addDays(weekStart, 7);
 
-  for (const res of [goalsRes, activitiesRes, constraintsRes, preferencesRes, availabilityRes]) {
+  const [goalsRes, activitiesRes, constraintsRes, preferencesRes, availabilityRes, commitmentsRes] =
+    await Promise.all([
+      supabase.from("goals").select("id, title, priority").eq("user_id", userId).eq("status", "active"),
+      supabase
+        .from("activities")
+        .select(
+          "id, name, default_duration_minutes, preferred_frequency, preferred_days, preferred_time_of_day, minimum_duration_minutes, maximum_duration_minutes, flexible",
+        )
+        .eq("user_id", userId)
+        .eq("enabled", true),
+      supabase.from("scheduling_constraints").select("type, value").eq("user_id", userId).eq("enabled", true),
+      supabase.from("preferences").select("type, value").eq("user_id", userId),
+      supabase
+        .from("availability")
+        .select(
+          "weekday_morning_start, weekday_morning_end, weekday_afternoon_start, weekday_afternoon_end, weekday_evening_start, weekday_evening_end, weekend_morning_start, weekend_morning_end, weekend_afternoon_start, weekend_afternoon_end, weekend_evening_start, weekend_evening_end, max_daily_planning_minutes",
+        )
+        .eq("user_id", userId)
+        .maybeSingle(),
+      supabase
+        .from("commitments")
+        .select("title, start_time, end_time")
+        .eq("user_id", userId)
+        .gte("start_time", weekStart.toISOString())
+        .lt("start_time", weekEnd.toISOString()),
+    ]);
+
+  for (const res of [goalsRes, activitiesRes, constraintsRes, preferencesRes, availabilityRes, commitmentsRes]) {
     if (res.error) {
       console.error("Failed to load planning inputs:", res.error);
       return { ok: false, message: GENERIC_ERROR_MESSAGE };
@@ -110,6 +121,19 @@ export async function loadEngineInputs(
     maxDailyPlanningMinutes: availabilityRow.max_daily_planning_minutes,
   };
 
+  // Same-day-only defensive filter, mirroring syncGoogleCalendarEvents.ts —
+  // the engine's MinuteRange model has no concept of a commitment spanning
+  // more than one calendar day.
+  const commitments: CommitmentInput[] = (commitmentsRes.data ?? [])
+    .map((row) => ({ title: row.title, start: new Date(row.start_time), end: new Date(row.end_time) }))
+    .filter((row) => toISODate(row.start) === toISODate(row.end))
+    .map((row) => ({
+      title: row.title,
+      scheduledDate: toISODate(row.start),
+      startTime: timeFromDate(row.start),
+      endTime: timeFromDate(row.end),
+    }));
+
   return {
     ok: true,
     input: {
@@ -119,6 +143,7 @@ export async function loadEngineInputs(
       constraints: constraintsRes.data ?? [],
       preferences: preferencesRes.data ?? [],
       availability,
+      commitments,
     },
   };
 }
