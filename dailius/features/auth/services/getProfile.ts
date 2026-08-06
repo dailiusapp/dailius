@@ -5,13 +5,14 @@ export type Profile = {
   fullName: string;
   email: string;
   onboardingCompleted: boolean;
+  createdAt: string;
 };
 
 export async function getProfile(userId: string): Promise<Profile | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, email, onboarding_completed")
+    .select("id, full_name, email, onboarding_completed, created_at")
     .eq("id", userId)
     .maybeSingle();
 
@@ -28,5 +29,6 @@ export async function getProfile(userId: string): Promise<Profile | null> {
     fullName: data.full_name,
     email: data.email,
     onboardingCompleted: data.onboarding_completed,
+    createdAt: data.created_at,
   };
 }
