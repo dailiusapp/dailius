@@ -13,11 +13,24 @@ export type ScheduledBlock = {
   rationale: string;
 };
 
+// Display shape for a commitment on the weekly plan — read-only from the
+// planner's perspective (imported from Google Calendar, or eventually
+// entered manually), distinct from a ScheduledBlock which the engine placed.
+export type CommitmentBlock = {
+  id: string;
+  title: string;
+  scheduledDate: string; // "YYYY-MM-DD"
+  startTime: string; // "HH:MM"
+  endTime: string; // "HH:MM"
+  source: string;
+};
+
 export type WeeklyPlan = {
   id: string;
   weekStart: string; // "YYYY-MM-DD", a Monday
   status: WeeklyPlanStatus;
   blocks: ScheduledBlock[];
+  commitments: CommitmentBlock[];
 };
 
 export type GeneratePlanResult =

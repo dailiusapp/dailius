@@ -67,7 +67,10 @@ export default async function WeeklyPlanPage({
               days.map((date) => {
                 const iso = toISODate(date);
                 const blocksForDay = plan.blocks.filter((block) => block.scheduledDate === iso);
-                return <DayScheduleSection key={iso} date={date} blocks={blocksForDay} />;
+                const commitmentsForDay = plan.commitments.filter((commitment) => commitment.scheduledDate === iso);
+                return (
+                  <DayScheduleSection key={iso} date={date} blocks={blocksForDay} commitments={commitmentsForDay} />
+                );
               })
             )}
           </div>

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { ActivityInput, AvailabilityInput, CommitmentInput, EngineInput, GoalInput } from "../types";
-import { addDays, getWeekStart, timeFromDate, toISODate } from "./dateUtils";
+import { addDays, getWeekStart, instantToLocalDateTime } from "./dateUtils";
 
 const GENERIC_ERROR_MESSAGE = "Something went wrong loading your planning data. Please try again.";
 
@@ -9,6 +9,12 @@ export async function loadEngineInputs(
 ): Promise<{ ok: true; input: EngineInput } | { ok: false; message: string }> {
   const supabase = await createClient();
 
+  // NOTE: week boundaries here are server-local (UTC), not the user's own
+  // timezone — a commitment within an hour or two of the Mon/Sun edge could
+  // in principle land on the wrong side of this query window in the user's
+  // own timezone. Same trade-off as `today: new Date()` below: a known,
+  // narrower remaining gap, distinct from the wrong-day-entirely bug that
+  // instantToLocalDateTime fixes for every commitment away from the edges.
   const weekStart = getWeekStart(new Date());
   const weekEnd = addDays(weekStart, 7);
 
@@ -33,7 +39,7 @@ export async function loadEngineInputs(
         .maybeSingle(),
       supabase
         .from("commitments")
-        .select("title, start_time, end_time")
+        .select("title, start_time, end_time, timezone")
         .eq("user_id", userId)
         .gte("start_time", weekStart.toISOString())
         .lt("start_time", weekEnd.toISOString()),
@@ -123,15 +129,21 @@ export async function loadEngineInputs(
 
   // Same-day-only defensive filter, mirroring syncGoogleCalendarEvents.ts —
   // the engine's MinuteRange model has no concept of a commitment spanning
-  // more than one calendar day.
+  // more than one calendar day. Converted using each commitment's own
+  // stored timezone, not the server's local clock — see
+  // instantToLocalDateTime for why that distinction matters.
   const commitments: CommitmentInput[] = (commitmentsRes.data ?? [])
-    .map((row) => ({ title: row.title, start: new Date(row.start_time), end: new Date(row.end_time) }))
-    .filter((row) => toISODate(row.start) === toISODate(row.end))
     .map((row) => ({
       title: row.title,
-      scheduledDate: toISODate(row.start),
-      startTime: timeFromDate(row.start),
-      endTime: timeFromDate(row.end),
+      start: instantToLocalDateTime(row.start_time, row.timezone),
+      end: instantToLocalDateTime(row.end_time, row.timezone),
+    }))
+    .filter((row) => row.start.date === row.end.date)
+    .map((row) => ({
+      title: row.title,
+      scheduledDate: row.start.date,
+      startTime: row.start.time,
+      endTime: row.end.time,
     }));
 
   return {

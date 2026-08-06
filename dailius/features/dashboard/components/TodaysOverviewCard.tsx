@@ -1,7 +1,7 @@
 import { CheckSquareIcon } from "@/components/landing/icons";
 import { DashboardCard } from "./DashboardCard";
 import { GeneratePlanButton } from "@/features/planning/components/GeneratePlanButton";
-import type { ScheduledBlock, WeeklyPlan } from "@/features/planning/types";
+import type { CommitmentBlock, ScheduledBlock, WeeklyPlan } from "@/features/planning/types";
 
 function totalMinutes(blocks: ScheduledBlock[]): number {
   return blocks.reduce((sum, block) => {
@@ -22,9 +22,11 @@ function formatDuration(minutes: number): string {
 export function TodaysOverviewCard({
   plan,
   todaysBlocks,
+  todaysCommitments,
 }: {
   plan: WeeklyPlan | null;
   todaysBlocks: ScheduledBlock[];
+  todaysCommitments: CommitmentBlock[];
 }) {
   return (
     <DashboardCard title="Today's Plan" icon={<CheckSquareIcon className="h-5 w-5 text-gray-400" />}>
@@ -35,13 +37,24 @@ export function TodaysOverviewCard({
             <GeneratePlanButton label="Generate My Plan" />
           </div>
         </>
-      ) : todaysBlocks.length === 0 ? (
+      ) : todaysBlocks.length === 0 && todaysCommitments.length === 0 ? (
         <p className="text-[15px] leading-6 text-gray-600">Rest day — nothing scheduled for today.</p>
       ) : (
         <ul className="space-y-1 text-sm text-gray-600">
-          <li>• {todaysBlocks.length} activities planned</li>
-          <li>• {formatDuration(totalMinutes(todaysBlocks))} scheduled</li>
-          <li>• No scheduling conflicts</li>
+          {todaysBlocks.length > 0 ? (
+            <>
+              <li>• {todaysBlocks.length} activities planned</li>
+              <li>• {formatDuration(totalMinutes(todaysBlocks))} scheduled</li>
+              <li>• No scheduling conflicts</li>
+            </>
+          ) : (
+            <li>• No activities planned</li>
+          )}
+          {todaysCommitments.length > 0 ? (
+            <li>
+              • {todaysCommitments.length} calendar {todaysCommitments.length === 1 ? "event" : "events"}
+            </li>
+          ) : null}
         </ul>
       )}
     </DashboardCard>

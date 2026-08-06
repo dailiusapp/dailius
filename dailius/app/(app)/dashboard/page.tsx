@@ -26,6 +26,7 @@ export default async function DashboardPage() {
   const plan = onboardingCompleted ? await getCurrentPlan(user.id) : null;
   const today = toISODate(new Date());
   const todaysBlocks = plan?.blocks.filter((block) => block.scheduledDate === today) ?? [];
+  const todaysCommitments = plan?.commitments.filter((commitment) => commitment.scheduledDate === today) ?? [];
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-10 sm:px-8 lg:px-12">
@@ -39,9 +40,14 @@ export default async function DashboardPage() {
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-6">
-          <TodaysFocusCard onboardingCompleted={onboardingCompleted} plan={plan} todaysBlocks={todaysBlocks} />
-          <TodaysOverviewCard plan={plan} todaysBlocks={todaysBlocks} />
-          <TodaysScheduleCard todaysBlocks={todaysBlocks} />
+          <TodaysFocusCard
+            onboardingCompleted={onboardingCompleted}
+            plan={plan}
+            todaysBlocks={todaysBlocks}
+            todaysCommitments={todaysCommitments}
+          />
+          <TodaysOverviewCard plan={plan} todaysBlocks={todaysBlocks} todaysCommitments={todaysCommitments} />
+          <TodaysScheduleCard todaysBlocks={todaysBlocks} todaysCommitments={todaysCommitments} />
         </div>
         <div className="flex flex-col gap-6">
           <WeeklyPlanPreviewCard plan={plan} />

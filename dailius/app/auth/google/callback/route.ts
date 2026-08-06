@@ -4,11 +4,13 @@ import { requireUser } from "@/features/auth/services/requireUser";
 import { createClient } from "@/lib/supabase/server";
 import { exchangeCodeForTokens } from "@/features/calendar/services/googleOAuth";
 import { syncGoogleCalendarEvents } from "@/features/calendar/services/syncGoogleCalendarEvents";
+import { getAppUrl } from "@/lib/env";
 import { STATE_COOKIE } from "../route";
 
 export async function GET(request: Request) {
   const user = await requireUser();
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const origin = getAppUrl();
 
   const code = searchParams.get("code");
   const state = searchParams.get("state");

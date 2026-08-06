@@ -3,7 +3,7 @@
 import { requireUser } from "@/features/auth/services/requireUser";
 import { createClient } from "@/lib/supabase/server";
 import type { ScheduledBlock, ScheduledBlockDraft } from "../types";
-import { addDays, parseISODate, timeFromDate, timeToMinutes } from "./dateUtils";
+import { addDays, instantToLocalDateTime, parseISODate, timeToMinutes } from "./dateUtils";
 import { getCurrentPlan } from "./getCurrentPlan";
 
 const GENERIC_ERROR_MESSAGE = "Something went wrong rescheduling that activity. Please try again.";
@@ -58,11 +58,15 @@ export async function confirmReschedule(
   // Same "never trust the client-echoed proposal" principle applied above
   // against other scheduled blocks — also re-check against commitments
   // (e.g. a Google Calendar event synced in between propose and confirm).
-  const dayStart = parseISODate(chosenOption.scheduledDate);
-  const dayEnd = addDays(dayStart, 1);
+  // Query window is padded a day on each side and then filtered precisely
+  // by each row's own timezone (see instantToLocalDateTime) — a commitment
+  // stored as a UTC instant can fall on `scheduledDate` in its own
+  // timezone while landing just outside a naive UTC day boundary.
+  const dayStart = addDays(parseISODate(chosenOption.scheduledDate), -1);
+  const dayEnd = addDays(parseISODate(chosenOption.scheduledDate), 2);
   const { data: commitmentRows, error: commitmentsError } = await supabase
     .from("commitments")
-    .select("start_time, end_time")
+    .select("start_time, end_time, timezone")
     .eq("user_id", user.id)
     .gte("start_time", dayStart.toISOString())
     .lt("start_time", dayEnd.toISOString());
@@ -72,11 +76,17 @@ export async function confirmReschedule(
     return { ok: false, message: GENERIC_ERROR_MESSAGE };
   }
 
-  const commitmentConflict = (commitmentRows ?? []).some((row) => {
-    const existingStart = timeToMinutes(timeFromDate(new Date(row.start_time)));
-    const existingEnd = timeToMinutes(timeFromDate(new Date(row.end_time)));
-    return existingStart < chosenEnd && chosenStart < existingEnd;
-  });
+  const commitmentConflict = (commitmentRows ?? [])
+    .map((row) => ({
+      start: instantToLocalDateTime(row.start_time, row.timezone),
+      end: instantToLocalDateTime(row.end_time, row.timezone),
+    }))
+    .filter((row) => row.start.date === chosenOption.scheduledDate)
+    .some((row) => {
+      const existingStart = timeToMinutes(row.start.time);
+      const existingEnd = timeToMinutes(row.end.time);
+      return existingStart < chosenEnd && chosenStart < existingEnd;
+    });
 
   if (commitmentConflict) {
     return { ok: false, message: "That time is no longer available. Please ask again for updated options." };

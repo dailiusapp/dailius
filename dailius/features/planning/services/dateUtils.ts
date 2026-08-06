@@ -55,6 +55,34 @@ export function timeFromDate(date: Date): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+// Converts a UTC instant (e.g. a commitment's `start_time`/`end_time`
+// timestamptz) into the engine's "YYYY-MM-DD" / "HH:MM" representation,
+// using an explicit IANA timezone rather than the server's local clock.
+// `timeFromDate` above is server-local and wrong for this — a 5pm Pacific
+// event stored as a UTC instant lands on the wrong calendar day entirely
+// when read back with server-local getters on a UTC server. `timeZone`
+// should be the zone the instant was originally expressed in (Google
+// Calendar returns this per-event as `start.timeZone`).
+export function instantToLocalDateTime(isoInstant: string, timeZone: string): { date: string; time: string } {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(new Date(isoInstant));
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  // Intl can format midnight as "24:00" with hour12: false — normalize to "00".
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    time: `${hour}:${get("minute")}`,
+  };
+}
+
 export function formatClockTime(time: string): string {
   const [hourStr, minuteStr] = time.split(":");
   const hour = Number(hourStr);

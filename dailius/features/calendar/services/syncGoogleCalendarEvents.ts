@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { addDays, getWeekStart, toISODate } from "@/features/planning/services/dateUtils";
+import { addDays, getWeekStart, instantToLocalDateTime } from "@/features/planning/services/dateUtils";
 import { getValidAccessToken } from "./getValidAccessToken";
 
 const CALENDAR_EVENTS_ENDPOINT = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
@@ -10,8 +10,12 @@ const SOURCE = "Google Calendar";
 type GoogleEvent = {
   id: string;
   summary?: string;
-  start?: { dateTime?: string; date?: string };
-  end?: { dateTime?: string; date?: string };
+  // `timeZone` is the IANA zone the event's dateTime was expressed in
+  // (Google defaults it to the calendar's own timezone when not
+  // explicitly overridden on the event) — the only reliable timezone
+  // signal available without building a settings UI of our own.
+  start?: { dateTime?: string; date?: string; timeZone?: string };
+  end?: { dateTime?: string; date?: string; timeZone?: string };
   status?: string;
 };
 
@@ -48,22 +52,28 @@ export async function syncGoogleCalendarEvents(userId: string): Promise<SyncGoog
     }
 
     // All-day events (`date` instead of `dateTime`) and events spanning
-    // more than one calendar day don't fit the engine's single-day
-    // MinuteRange model — skipped here as a documented limitation, same as
-    // other engine edge cases, rather than teaching the engine multi-day
-    // ranges for what's expected to be a rare case.
+    // more than one calendar day (in the event's own timezone, not the
+    // server's) don't fit the engine's single-day MinuteRange model —
+    // skipped here as a documented limitation, same as other engine edge
+    // cases, rather than teaching the engine multi-day ranges for what's
+    // expected to be a rare case.
     const rows = (data.items ?? [])
       .filter((event) => event.status !== "cancelled")
       .filter((event) => event.start?.dateTime && event.end?.dateTime)
-      .filter((event) => toISODate(new Date(event.start!.dateTime!)) === toISODate(new Date(event.end!.dateTime!)))
       .map((event) => ({
         user_id: userId,
         title: event.summary?.trim() || "Busy",
         start_time: event.start!.dateTime!,
         end_time: event.end!.dateTime!,
+        timezone: event.start!.timeZone || event.end!.timeZone || "UTC",
         source: SOURCE,
         external_event_id: event.id,
-      }));
+      }))
+      .filter(
+        (row) =>
+          instantToLocalDateTime(row.start_time, row.timezone).date ===
+          instantToLocalDateTime(row.end_time, row.timezone).date,
+      );
 
     const supabase = await createClient();
 

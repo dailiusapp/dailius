@@ -1,13 +1,33 @@
 import { toISODate } from "@/features/planning/services/dateUtils";
-import type { ScheduledBlock } from "@/features/planning/types";
+import type { CommitmentBlock, ScheduledBlock } from "@/features/planning/types";
 import { ScheduledBlockRow } from "./ScheduledBlockRow";
+import { CommitmentRow } from "./CommitmentRow";
 
 const WEEKDAY_FORMATTER = new Intl.DateTimeFormat("en-US", { weekday: "long" });
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
-export function DayScheduleSection({ date, blocks }: { date: Date; blocks: ScheduledBlock[] }) {
+type ScheduleItem =
+  | { startTime: string; kind: "block"; block: ScheduledBlock }
+  | { startTime: string; kind: "commitment"; commitment: CommitmentBlock };
+
+export function DayScheduleSection({
+  date,
+  blocks,
+  commitments,
+}: {
+  date: Date;
+  blocks: ScheduledBlock[];
+  commitments: CommitmentBlock[];
+}) {
   const iso = toISODate(date);
-  const sortedBlocks = [...blocks].sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const items: ScheduleItem[] = [
+    ...blocks.map((block): ScheduleItem => ({ startTime: block.startTime, kind: "block", block })),
+    ...commitments.map((commitment): ScheduleItem => ({
+      startTime: commitment.startTime,
+      kind: "commitment",
+      commitment,
+    })),
+  ].sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   return (
     <section
@@ -19,13 +39,17 @@ export function DayScheduleSection({ date, blocks }: { date: Date; blocks: Sched
       </h2>
 
       <div className="mt-4">
-        {sortedBlocks.length === 0 ? (
+        {items.length === 0 ? (
           <p className="text-[15px] leading-6 text-gray-600">Rest day.</p>
         ) : (
           <ul className="space-y-3">
-            {sortedBlocks.map((block) => (
-              <ScheduledBlockRow key={block.id} block={block} />
-            ))}
+            {items.map((item) =>
+              item.kind === "block" ? (
+                <ScheduledBlockRow key={item.block.id} block={item.block} />
+              ) : (
+                <CommitmentRow key={item.commitment.id} commitment={item.commitment} />
+              ),
+            )}
           </ul>
         )}
       </div>

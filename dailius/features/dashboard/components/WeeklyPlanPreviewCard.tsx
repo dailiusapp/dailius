@@ -28,7 +28,8 @@ export function WeeklyPlanPreviewCard({ plan }: { plan: WeeklyPlan | null }) {
         {days.map((date) => {
           const iso = toISODate(date);
           const weekStart = toISODate(getWeekStart(date));
-          const count = plan?.blocks.filter((block) => block.scheduledDate === iso).length ?? 0;
+          const blocksCount = plan?.blocks.filter((block) => block.scheduledDate === iso).length ?? 0;
+          const commitmentsCount = plan?.commitments.filter((commitment) => commitment.scheduledDate === iso).length ?? 0;
           return (
             <li key={date.toDateString()}>
               <Link
@@ -41,7 +42,13 @@ export function WeeklyPlanPreviewCard({ plan }: { plan: WeeklyPlan | null }) {
                   </span>
                   <span className="text-gray-500">{DATE_FORMATTER.format(date)}</span>
                 </span>
-                <span className="text-gray-500">{count > 0 ? `${count} Activities` : "Rest Day"}</span>
+                <span className="text-gray-500">
+                  {blocksCount > 0
+                    ? `${blocksCount} Activities`
+                    : commitmentsCount > 0
+                      ? `${commitmentsCount} Events`
+                      : "Rest Day"}
+                </span>
               </Link>
             </li>
           );
