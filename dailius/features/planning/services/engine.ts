@@ -144,6 +144,26 @@ export function computeFreeBlocksForWeek(input: EngineInput): DayPlan[] {
   return days;
 }
 
+// Seeds a `days` array (from `computeFreeBlocksForWeek`) with time already
+// occupied by blocks the caller already knows about — used by targeted
+// single-activity replanning, where the week isn't blank the way it is for
+// a full `generateWeeklySchedule` run. Mutates `days` in place, same as
+// `placeOccurrence`.
+export function seedExistingBookings(
+  days: DayPlan[],
+  bookings: { scheduledDate: string; startTime: string; endTime: string; isExercise: boolean }[],
+): void {
+  for (const booking of bookings) {
+    const day = days.find((d) => d.date === booking.scheduledDate);
+    if (!day) continue;
+
+    const range = { start: timeToMinutes(booking.startTime), end: timeToMinutes(booking.endTime) };
+    day.freeRanges = subtractRange(day.freeRanges, range);
+    day.plannedMinutes += range.end - range.start;
+    if (booking.isExercise) day.hasExerciseBlock = true;
+  }
+}
+
 type ResolvedActivity = {
   activity: ActivityInput;
   priority: GoalPriority;
@@ -275,7 +295,7 @@ function findNearbyProtectedLabel(day: DayPlan, slot: MinuteRange): string | nul
   return nearby?.label ?? null;
 }
 
-function placeOccurrence(
+export function placeOccurrence(
   resolved: ResolvedActivity,
   occurrenceIndex: number,
   days: DayPlan[],
@@ -332,6 +352,75 @@ function placeOccurrence(
   }
 
   return null;
+}
+
+// Non-mutating sibling of `placeOccurrence`, used to propose several
+// alternative slots (e.g. for a user to pick from) instead of committing to
+// one. Unlike `placeOccurrence`, it never writes to `days` — every
+// candidate is evaluated against the same free/busy snapshot rather than
+// sequential placement into a shrinking pool — and it returns at most one
+// slot per candidate day (up to `limit` days), trying the duration fallback
+// within each day before moving to the next, which is the right order for
+// "here are your options" rather than "here is the one placement."
+export function placeOccurrenceCandidates(
+  resolved: ResolvedActivity,
+  days: DayPlan[],
+  occurrenceIndex: number,
+  exerciseCutoffMinutes: number | null,
+  maxDailyMinutes: number | null,
+  limit: number,
+): ScheduledBlockDraft[] {
+  const { activity, durationMinutes, isExercise, linkedGoalTitle } = resolved;
+  const candidates = candidateDaysForOccurrence(resolved, occurrenceIndex, days);
+
+  const durationsToTry = [durationMinutes];
+  if (activity.minimumDurationMinutes && activity.minimumDurationMinutes < durationMinutes) {
+    durationsToTry.push(activity.minimumDurationMinutes);
+  }
+
+  const results: ScheduledBlockDraft[] = [];
+
+  for (const day of candidates) {
+    if (results.length >= limit) break;
+
+    for (const wantedDuration of durationsToTry) {
+      const slot = findSlotInDay(
+        day,
+        wantedDuration,
+        activity.preferredTimeOfDay,
+        isExercise,
+        exerciseCutoffMinutes,
+        maxDailyMinutes,
+      );
+      if (!slot) continue;
+
+      const matchedPreferredDay = activity.preferredDays.includes(day.dayLabel);
+      const placementReason: PlacementReason =
+        activity.preferredDays.length === 0 ? "balance" : matchedPreferredDay ? "preferred-day" : "fallback-from-preferred-day";
+
+      const rationale = buildRationale({
+        activityName: activity.name,
+        dayLabel: day.dayLabel,
+        placementReason,
+        linkedGoalTitle,
+        cutoffTime: isExercise && exerciseCutoffMinutes !== null ? minutesToTime(exerciseCutoffMinutes) : null,
+        protectedLabel: findNearbyProtectedLabel(day, slot),
+        shortenedToMinutes: wantedDuration < durationMinutes ? wantedDuration : null,
+      });
+
+      results.push({
+        activityId: activity.id,
+        activityName: activity.name,
+        scheduledDate: day.date,
+        startTime: minutesToTime(slot.start),
+        endTime: minutesToTime(slot.end),
+        rationale,
+      });
+      break;
+    }
+  }
+
+  return results;
 }
 
 export function placeActivities(

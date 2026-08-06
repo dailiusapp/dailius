@@ -1,7 +1,6 @@
-import { cn } from "@/lib/cn";
-import { formatClockTime, toISODate } from "@/features/planning/services/dateUtils";
-import { STATUS_LABELS, STATUS_STYLES } from "@/features/planning/constants";
+import { toISODate } from "@/features/planning/services/dateUtils";
 import type { ScheduledBlock } from "@/features/planning/types";
+import { ScheduledBlockRow } from "./ScheduledBlockRow";
 
 const WEEKDAY_FORMATTER = new Intl.DateTimeFormat("en-US", { weekday: "long" });
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
@@ -25,22 +24,7 @@ export function DayScheduleSection({ date, blocks }: { date: Date; blocks: Sched
         ) : (
           <ul className="space-y-3">
             {sortedBlocks.map((block) => (
-              <li key={block.id} className="rounded-xl border border-gray-200 px-4 py-3 text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-navy">{block.activityName}</p>
-                    <p className="text-gray-500">
-                      {formatClockTime(block.startTime)}–{formatClockTime(block.endTime)}
-                    </p>
-                  </div>
-                  <span
-                    className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", STATUS_STYLES[block.status])}
-                  >
-                    {STATUS_LABELS[block.status]}
-                  </span>
-                </div>
-                <p className="mt-2 text-[13px] leading-5 text-gray-500">{block.rationale}</p>
-              </li>
+              <ScheduledBlockRow key={block.id} block={block} />
             ))}
           </ul>
         )}
