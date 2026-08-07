@@ -15,71 +15,52 @@ Update this file as new stubs are added or items get resolved.
 **Where:** `/assistant` — a real chat interface backed by an OpenAI
 integration (`features/assistant/`).
 
-**What works:** exactly one intent — "I missed activity X." The AI layer
-(`features/assistant/services/extractIntent.ts`) only ever classifies:
-given the user's message and the real, already-scheduled activities from
-their current week, it picks a matching one or returns null — it never
-invents a date, time, or schedule change. The actual rescheduling is a
-two-step propose/confirm flow: `proposeReschedule.ts` computes up to 3
+**What works:** two intents — "I missed activity X" and "move upcoming
+activity X to [day]." The AI layer classifies which intent and which
+real, already-scheduled block a message refers to (`extractIntent.ts` for
+past/missed blocks, `extractFutureRescheduleIntent.ts` for future blocks,
+tried in that order) — it never invents a date, time, or schedule change,
+and for the future-move intent it may also extract a named target day of
+week, which only *biases* the engine's search rather than deciding the
+placement itself. The actual rescheduling is a two-step propose/confirm
+flow: `proposeReschedule.ts` / `proposeFutureReschedule.ts` compute up to 3
 alternative day/time options (no DB writes) and the chat presents them as
-clickable buttons; picking one calls `confirmReschedule.ts`, which
-re-validates the chosen slot is still free, deletes the original missed
-block, and inserts the new one — a *targeted* change touching only those
-two rows, not a full-week regeneration. Both live in
+clickable buttons; picking one calls `confirmReschedule.ts` (shared by both
+intents), which re-validates the chosen slot is still free, deletes the
+original block, and inserts the new one — a *targeted* change touching only
+those two rows, not a full-week regeneration. All of this lives in
 `features/planning/services/`, reusing the existing deterministic engine
 (`features/planning/services/engine.ts`) rather than reimplementing it.
 
 **What's still missing:**
-- Any other kind of request ("I have to work late Wednesday," "move my run
-  to Friday," general questions about the plan) — gets a graceful fallback
-  reply, not real handling. Only the missed-activity intent is understood.
-- **Misleading fallback copy for future-reschedule requests** — a message
-  about an *upcoming* activity (not yet missed) never reaches the AI
-  matching step at all (`sendChatMessage.ts` only offers candidates with
-  `scheduledDate <= today`), so the user gets the generic "I couldn't tell
-  which activity you meant" reply — same wording as a genuinely garbled
-  message — rather than something honest like "I can only handle already-
-  missed activities right now." Worth a distinct reply once there's a
-  reason to tell the two cases apart.
+- General questions about the plan, or requests that aren't clearly "I missed
+  X" or "move X to Y" — still get the generic fallback reply, not real
+  handling.
 - **Persisted chat history** — conversations are client-side state only
   and reset on page reload. Deliberately deferred for this first pass;
   would need a new `chat_messages` table + migration.
 
 ---
 
-# Future Activity Rescheduling
-
-**Where:** Not implemented anywhere in the app.
-
-**What's missing:** Conversational replanning today only handles reporting
-something already missed. It doesn't yet handle proactively moving an
-*upcoming* activity — "I have to work late Wednesday, move my run" or "move
-Friday's run to Saturday." This is a distinct intent from "missed activity":
-different candidate list (future `scheduled` blocks instead of past ones),
-a new AI intent type, and different rationale copy — but should be able to
-reuse the same underlying engine primitives
-(`placeOccurrence`/`seedExistingBookings` in `features/planning/services/engine.ts`)
-that `replanMissedActivity.ts` already uses.
-
----
-
 # Dashboard nav / quick-action placeholder pages
 
-**Where:** `/goals`, `/settings`, `/report-missed-activity`,
-`/add-activity` — still render a generic "coming soon" placeholder
-(`components/app/ComingSoon.tsx`). (`/weekly-plan` and `/profile` were
-built and are no longer stubs.)
+**Where:** `/goals`, `/settings`, `/report-missed-activity` — still render a
+generic "coming soon" placeholder (`components/app/ComingSoon.tsx`).
+(`/weekly-plan`, `/profile`, and `/add-activity` were built and are no
+longer stubs.)
 
 **What's missing:**
 - `/goals` — goal management UI (list/edit/pause the `goals` rows
-  onboarding creates).
+  onboarding creates). Note `/add-activity` (`features/activities/`)
+  deliberately ships without a goal-linking picker — no "fetch this user's
+  goals" service or picker UI exists yet, so building `/goals` first would
+  make that a natural follow-up rather than new scope.
 - `/settings` — account settings (password change, account deletion —
   explicitly out of scope for `/profile`, see its own page).
 - `/report-missed-activity` — likely superseded by the `/assistant` chat
   flow above rather than needing its own separate form; revisit whether
   this page is still needed once conversational replanning covers the
   same use case.
-- `/add-activity` — ad-hoc activity creation outside the onboarding flow.
 
 ---
 
