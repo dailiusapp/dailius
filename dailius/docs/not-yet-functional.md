@@ -31,6 +31,12 @@ verified; move any real bugs found into their own note before removing.
   status, delete a goal; on `/add-activity`, confirm a goal shows up as a
   linkable chip and that `/goals`' "N activities linked" count updates after
   linking one.
+- **`/settings`** (`features/settings/`) — **requires applying migration
+  `20260807020000_add_profile_deletion_request.sql` first.** Change password
+  with the correct current password, confirm re-login works with the new
+  one; try an incorrect current password, confirm the specific field error;
+  request account deletion, confirm the "requested on `<date>`" state
+  persists on reload; cancel the request, confirm it flips back.
 
 ---
 
@@ -66,19 +72,24 @@ those two rows, not a full-week regeneration. All of this lives in
 
 ---
 
-# Dashboard nav / quick-action placeholder pages
+# Account deletion is a "request" flow, not real self-service deletion
 
-**Where:** `/settings`, `/report-missed-activity` — still render a generic
-"coming soon" placeholder (`components/app/ComingSoon.tsx`). (`/weekly-plan`,
-`/profile`, `/add-activity`, and `/goals` were built and are no longer stubs.)
+**Where:** `/settings` (`features/settings/`) — `DeleteAccountRequest.tsx`
+records a `deletion_requested_at` timestamp on the user's profile and shows
+a confirmation; nothing actually deletes the account or its data.
 
-**What's missing:**
-- `/settings` — account settings (password change, account deletion —
-  explicitly out of scope for `/profile`, see its own page).
-- `/report-missed-activity` — likely superseded by the `/assistant` chat
-  flow above rather than needing its own separate form; revisit whether
-  this page is still needed once conversational replanning covers the
-  same use case.
+**What's missing:** real deletion needs `supabase.auth.admin.deleteUser()`,
+which requires a Supabase **service-role** key. This project has none
+configured anywhere (not `.env.local`, not `.env.example`, not referenced by
+any existing `lib/supabase/` client — all anon-key only). Every planning/
+onboarding/calendar table already cascades from `auth.users(id) on delete
+cascade`, so once a service-role-backed admin client actually deletes the
+`auth.users` row, cleanup is automatic — no per-table deletes needed. The
+remaining work is a deliberate decision to provision
+`SUPABASE_SERVICE_ROLE_KEY` (Supabase dashboard → project settings → API)
+and add it to `.env.local` + Vercel, plus a new server-only admin client
+(never exposed to the browser) to call it from. Until then, deletion
+requests need a human to act on them manually.
 
 ---
 
