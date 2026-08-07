@@ -10,6 +10,7 @@ export type RationaleContext = {
   cutoffTime: string | null; // "HH:MM", set only when this activity is exercise-classified and a cutoff is enabled
   protectedLabel: string | null; // set only when the slot landed near a protected-time range that day
   shortenedToMinutes: number | null; // set only when the minimum-duration fallback was used
+  preferredTimeOfDay: string | null; // set only when the activity wanted this time of day but the slot landed outside it
 };
 
 // Fixed-order template concatenation so identical inputs always produce
@@ -43,6 +44,9 @@ export function buildRationale(context: RationaleContext): string {
   }
   if (context.shortenedToMinutes) {
     parts.push(`Shortened to ${context.shortenedToMinutes} minutes to fit your available time.`);
+  }
+  if (context.preferredTimeOfDay) {
+    parts.push(`Your preferred ${context.preferredTimeOfDay.toLowerCase()} slot was full, so this landed outside it.`);
   }
 
   return parts.join(" ");

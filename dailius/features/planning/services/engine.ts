@@ -256,11 +256,25 @@ function candidateDaysForOccurrence(
   return rankDaysByBalance(days, isExercise);
 }
 
+function rangeMidpoint(range: MinuteRange): number {
+  return (range.start + range.end) / 2;
+}
+
+// Ranges actually overlapping the preferred window always come first. When
+// none do (that window is fully booked, protected, or was never configured
+// as available), the remaining ranges are tried in order of how close they
+// are to the preferred window rather than their arbitrary original order —
+// otherwise a fallback always lands in whichever window happens to be
+// listed first (morning), even when a closer, equally-free window (e.g.
+// evening, for an "Afternoon" preference) is available.
 function orderRangesByPreference(ranges: MinuteRange[], preferredTimeOfDay: string | null): MinuteRange[] {
   if (!preferredTimeOfDay || !TIME_OF_DAY_BOUNDS[preferredTimeOfDay]) return ranges;
   const bounds = TIME_OF_DAY_BOUNDS[preferredTimeOfDay];
+  const preferredCenter = rangeMidpoint(bounds);
   const matches = ranges.filter((range) => range.start < bounds.end && range.end > bounds.start);
-  const rest = ranges.filter((range) => !(range.start < bounds.end && range.end > bounds.start));
+  const rest = [...ranges.filter((range) => !(range.start < bounds.end && range.end > bounds.start))].sort(
+    (a, b) => Math.abs(rangeMidpoint(a) - preferredCenter) - Math.abs(rangeMidpoint(b) - preferredCenter),
+  );
   return [...matches, ...rest];
 }
 
@@ -271,17 +285,20 @@ function findSlotInDay(
   isExercise: boolean,
   exerciseCutoffMinutes: number | null,
   maxDailyMinutes: number | null,
-): MinuteRange | null {
+): { slot: MinuteRange; matchedPreferredTime: boolean } | null {
   if (day.isPast) return null;
   if (maxDailyMinutes !== null && day.plannedMinutes + durationMinutes > maxDailyMinutes) return null;
 
   const cutoff = isExercise && exerciseCutoffMinutes !== null ? exerciseCutoffMinutes : null;
+  const bounds = preferredTimeOfDay ? TIME_OF_DAY_BOUNDS[preferredTimeOfDay] : null;
   const orderedRanges = orderRangesByPreference(day.freeRanges, preferredTimeOfDay);
 
   for (const range of orderedRanges) {
     const effectiveEnd = cutoff !== null ? Math.min(range.end, cutoff) : range.end;
     if (effectiveEnd - range.start >= durationMinutes) {
-      return { start: range.start, end: range.start + durationMinutes };
+      const slot = { start: range.start, end: range.start + durationMinutes };
+      const matchedPreferredTime = !bounds || (slot.start < bounds.end && slot.end > bounds.start);
+      return { slot, matchedPreferredTime };
     }
   }
   return null;
@@ -312,7 +329,7 @@ export function placeOccurrence(
 
   for (const wantedDuration of durationsToTry) {
     for (const day of candidates) {
-      const slot = findSlotInDay(
+      const found = findSlotInDay(
         day,
         wantedDuration,
         activity.preferredTimeOfDay,
@@ -320,7 +337,8 @@ export function placeOccurrence(
         exerciseCutoffMinutes,
         maxDailyMinutes,
       );
-      if (!slot) continue;
+      if (!found) continue;
+      const { slot, matchedPreferredTime } = found;
 
       day.freeRanges = subtractRange(day.freeRanges, slot);
       day.plannedMinutes += wantedDuration;
@@ -338,6 +356,7 @@ export function placeOccurrence(
         cutoffTime: isExercise && exerciseCutoffMinutes !== null ? minutesToTime(exerciseCutoffMinutes) : null,
         protectedLabel: findNearbyProtectedLabel(day, slot),
         shortenedToMinutes: wantedDuration < durationMinutes ? wantedDuration : null,
+        preferredTimeOfDay: !matchedPreferredTime ? activity.preferredTimeOfDay : null,
       });
 
       return {
@@ -384,7 +403,7 @@ export function placeOccurrenceCandidates(
     if (results.length >= limit) break;
 
     for (const wantedDuration of durationsToTry) {
-      const slot = findSlotInDay(
+      const found = findSlotInDay(
         day,
         wantedDuration,
         activity.preferredTimeOfDay,
@@ -392,7 +411,8 @@ export function placeOccurrenceCandidates(
         exerciseCutoffMinutes,
         maxDailyMinutes,
       );
-      if (!slot) continue;
+      if (!found) continue;
+      const { slot, matchedPreferredTime } = found;
 
       const matchedPreferredDay = activity.preferredDays.includes(day.dayLabel);
       const placementReason: PlacementReason =
@@ -406,6 +426,7 @@ export function placeOccurrenceCandidates(
         cutoffTime: isExercise && exerciseCutoffMinutes !== null ? minutesToTime(exerciseCutoffMinutes) : null,
         protectedLabel: findNearbyProtectedLabel(day, slot),
         shortenedToMinutes: wantedDuration < durationMinutes ? wantedDuration : null,
+        preferredTimeOfDay: !matchedPreferredTime ? activity.preferredTimeOfDay : null,
       });
 
       results.push({
