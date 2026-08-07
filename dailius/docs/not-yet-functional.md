@@ -10,37 +10,6 @@ Update this file as new stubs are added or items get resolved.
 
 ---
 
-# Needs Live Testing
-
-Built and passing `npm run lint`/`npm run build`, but not yet clicked through
-in a real browser with a logged-in user — no browser automation was
-available in the session(s) that built these. Remove each bullet once
-verified; move any real bugs found into their own note before removing.
-
-- **Future-activity rescheduling** (`/assistant`, `extractFutureRescheduleIntent.ts`
-  / `proposeFutureReschedule.ts`) — try "move Friday's run to Saturday" (day
-  named, should be offered first) and "I have to work late Wednesday, move my
-  gym session" (no day named, should show balanced alternatives); confirm
-  picking an option still swaps the block correctly; confirm the existing
-  "I missed my Tuesday workout" flow still works unchanged.
-- **`/add-activity`** (`features/activities/`) — create one activity in
-  "specific days" mode and one in "times per week" mode; confirm empty name
-  and zero-days-selected are both rejected; confirm a created activity
-  actually gets scheduled on the next `generatePlan()` run.
-- **`/goals`** (`features/goals/`) — create a goal, edit its title/priority/
-  status, delete a goal; on `/add-activity`, confirm a goal shows up as a
-  linkable chip and that `/goals`' "N activities linked" count updates after
-  linking one.
-- **`/settings`** (`features/settings/`) — migration
-  `20260807020000_add_profile_deletion_request.sql` is applied. Change
-  password with the correct current password, confirm re-login works with
-  the new one; try an incorrect current password, confirm the specific
-  field error; request account deletion, confirm the "requested on
-  `<date>`" state persists on reload; cancel the request, confirm it flips
-  back.
-
----
-
 # Conversational Replanning (partial)
 
 **Where:** `/assistant` — a real chat interface backed by an OpenAI
