@@ -10,6 +10,30 @@ Update this file as new stubs are added or items get resolved.
 
 ---
 
+# Needs Live Testing
+
+Built and passing `npm run lint`/`npm run build`, but not yet clicked through
+in a real browser with a logged-in user — no browser automation was
+available in the session(s) that built these. Remove each bullet once
+verified; move any real bugs found into their own note before removing.
+
+- **Future-activity rescheduling** (`/assistant`, `extractFutureRescheduleIntent.ts`
+  / `proposeFutureReschedule.ts`) — try "move Friday's run to Saturday" (day
+  named, should be offered first) and "I have to work late Wednesday, move my
+  gym session" (no day named, should show balanced alternatives); confirm
+  picking an option still swaps the block correctly; confirm the existing
+  "I missed my Tuesday workout" flow still works unchanged.
+- **`/add-activity`** (`features/activities/`) — create one activity in
+  "specific days" mode and one in "times per week" mode; confirm empty name
+  and zero-days-selected are both rejected; confirm a created activity
+  actually gets scheduled on the next `generatePlan()` run.
+- **`/goals`** (`features/goals/`) — create a goal, edit its title/priority/
+  status, delete a goal; on `/add-activity`, confirm a goal shows up as a
+  linkable chip and that `/goals`' "N activities linked" count updates after
+  linking one.
+
+---
+
 # Conversational Replanning (partial)
 
 **Where:** `/assistant` — a real chat interface backed by an OpenAI
@@ -44,17 +68,11 @@ those two rows, not a full-week regeneration. All of this lives in
 
 # Dashboard nav / quick-action placeholder pages
 
-**Where:** `/goals`, `/settings`, `/report-missed-activity` — still render a
-generic "coming soon" placeholder (`components/app/ComingSoon.tsx`).
-(`/weekly-plan`, `/profile`, and `/add-activity` were built and are no
-longer stubs.)
+**Where:** `/settings`, `/report-missed-activity` — still render a generic
+"coming soon" placeholder (`components/app/ComingSoon.tsx`). (`/weekly-plan`,
+`/profile`, `/add-activity`, and `/goals` were built and are no longer stubs.)
 
 **What's missing:**
-- `/goals` — goal management UI (list/edit/pause the `goals` rows
-  onboarding creates). Note `/add-activity` (`features/activities/`)
-  deliberately ships without a goal-linking picker — no "fetch this user's
-  goals" service or picker UI exists yet, so building `/goals` first would
-  make that a natural follow-up rather than new scope.
 - `/settings` — account settings (password change, account deletion —
   explicitly out of scope for `/profile`, see its own page).
 - `/report-missed-activity` — likely superseded by the `/assistant` chat
