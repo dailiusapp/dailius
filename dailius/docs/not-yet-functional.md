@@ -31,12 +31,13 @@ verified; move any real bugs found into their own note before removing.
   status, delete a goal; on `/add-activity`, confirm a goal shows up as a
   linkable chip and that `/goals`' "N activities linked" count updates after
   linking one.
-- **`/settings`** (`features/settings/`) — **requires applying migration
-  `20260807020000_add_profile_deletion_request.sql` first.** Change password
-  with the correct current password, confirm re-login works with the new
-  one; try an incorrect current password, confirm the specific field error;
-  request account deletion, confirm the "requested on `<date>`" state
-  persists on reload; cancel the request, confirm it flips back.
+- **`/settings`** (`features/settings/`) — migration
+  `20260807020000_add_profile_deletion_request.sql` is applied. Change
+  password with the correct current password, confirm re-login works with
+  the new one; try an incorrect current password, confirm the specific
+  field error; request account deletion, confirm the "requested on
+  `<date>`" state persists on reload; cancel the request, confirm it flips
+  back.
 
 ---
 
