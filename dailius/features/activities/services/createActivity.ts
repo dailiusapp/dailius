@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/auth/services/requireUser";
 import { createClient } from "@/lib/supabase/server";
+import { generatePlan } from "@/features/planning/services/generatePlan";
 import type { CreateActivityInput, CreateActivityResult } from "../types";
 
 const FREQUENCY_OPTIONS = ["Daily", "3 times per week", "2 times per week", "Once per week", "Twice per month"];
@@ -57,6 +58,16 @@ export async function createActivity(input: CreateActivityInput): Promise<Create
     } else {
       revalidatePath("/goals");
     }
+  }
+
+  // Reflect the new activity in the schedule right away rather than leaving
+  // it as an input the user won't see until they separately regenerate.
+  const planResult = await generatePlan();
+  if (!planResult.ok) {
+    console.error("Failed to regenerate plan after adding activity:", planResult.message);
+  } else {
+    revalidatePath("/weekly-plan");
+    revalidatePath("/dashboard");
   }
 
   return { ok: true, activityId: data.id };
