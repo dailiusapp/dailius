@@ -6,7 +6,7 @@ import { GeneratePlanButton } from "@/features/planning/components/GeneratePlanB
 import { WeekNavigator } from "@/features/planning/components/WeekNavigator";
 import { DayScheduleSection } from "@/features/planning/components/DayScheduleSection";
 import { EmptyUserExperience } from "@/features/dashboard/components/EmptyUserExperience";
-import { addDays, getWeekStart, parseISODate, toISODate } from "@/features/planning/services/dateUtils";
+import { addDays, getWeekStart, parseISODate, toISODate, todayInTimezone } from "@/features/planning/services/dateUtils";
 
 export const metadata: Metadata = {
   title: "Weekly Plan — Dailius",
@@ -27,7 +27,7 @@ export default async function WeeklyPlanPage({
   const onboardingCompleted = profile?.onboardingCompleted ?? false;
 
   const { week } = await searchParams;
-  const currentWeekStart = toISODate(getWeekStart(new Date()));
+  const currentWeekStart = toISODate(getWeekStart(todayInTimezone(profile?.timezone ?? null)));
   const weekStart =
     week && isValidISODate(week) ? toISODate(getWeekStart(parseISODate(week))) : currentWeekStart;
   const isCurrentWeek = weekStart === currentWeekStart;

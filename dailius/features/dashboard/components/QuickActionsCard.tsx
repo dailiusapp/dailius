@@ -14,7 +14,7 @@ const LINK_ACTIONS = [
 export function QuickActionsCard() {
   return (
     <DashboardCard title="Quick Actions" icon={<SlidersIcon className="h-5 w-5 text-gray-400" />}>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <GeneratePlanButton label="Generate Weekly Plan" className={QUICK_ACTION_TILE_CLASSES} />
         {LINK_ACTIONS.map((action) => (
           <Link key={action.href} href={action.href} className={QUICK_ACTION_TILE_CLASSES}>

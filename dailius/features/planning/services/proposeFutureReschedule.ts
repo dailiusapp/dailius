@@ -9,9 +9,10 @@ import {
   prioritizeActivities,
   seedExistingBookings,
 } from "./engine";
-import { dayOfWeekLabel, parseISODate, timeToMinutes, toISODate } from "./dateUtils";
+import { dayOfWeekLabel, parseISODate, timeToMinutes, toISODate, todayInTimezone } from "./dateUtils";
 import { getCurrentPlan } from "./getCurrentPlan";
 import { loadEngineInputs } from "./loadEngineInputs";
+import { getUserTimezone } from "@/features/auth/services/getUserTimezone";
 
 const OPTION_LIMIT = 3;
 
@@ -38,7 +39,8 @@ export async function proposeFutureReschedule(
     return { ok: false, message: `That activity has already been marked ${movingBlock.status}.` };
   }
 
-  const todayIso = toISODate(new Date());
+  const timezone = await getUserTimezone(user.id);
+  const todayIso = toISODate(todayInTimezone(timezone));
   if (movingBlock.scheduledDate <= todayIso) {
     return {
       ok: false,

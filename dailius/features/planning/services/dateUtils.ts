@@ -49,8 +49,9 @@ export function minutesToTime(minutes: number): string {
 // Extracts "HH:MM" from a Date's local hours/minutes — used to turn a
 // commitment's timestamptz start/end into the same clock-time
 // representation the engine already uses everywhere else. Server-local
-// time, same simplification as `today: new Date()` elsewhere in the
-// engine — no per-user timezone handling exists yet.
+// time; callers wanting the user's own local time should go through
+// `currentTimeInTimezone` instead, which falls back to this when no
+// timezone has been captured yet.
 export function timeFromDate(date: Date): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
@@ -81,6 +82,25 @@ export function instantToLocalDateTime(isoInstant: string, timeZone: string): { 
     date: `${get("year")}-${get("month")}-${get("day")}`,
     time: `${hour}:${get("minute")}`,
   };
+}
+
+// Returns a Date whose local-getter-read calendar date (year/month/day)
+// matches "today" in the given IANA timezone — a drop-in replacement for
+// `new Date()` at every call site that only ever reads the date portion
+// (toISODate, getWeekStart, EngineInput.today) but previously got the
+// server's own timezone (UTC) instead of the user's. Falls back to the
+// server's raw clock when no timezone has been captured yet for this user.
+export function todayInTimezone(timezone: string | null): Date {
+  if (!timezone) return new Date();
+  const { date } = instantToLocalDateTime(new Date().toISOString(), timezone);
+  return parseISODate(date);
+}
+
+// Same idea as `todayInTimezone`, for call sites that need the current
+// wall-clock time ("HH:MM") rather than the date.
+export function currentTimeInTimezone(timezone: string | null): string {
+  if (!timezone) return timeFromDate(new Date());
+  return instantToLocalDateTime(new Date().toISOString(), timezone).time;
 }
 
 export function formatClockTime(time: string): string {

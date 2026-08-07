@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { ActivityInput, AvailabilityInput, CommitmentInput, EngineInput, GoalInput } from "../types";
-import { addDays, getWeekStart, instantToLocalDateTime } from "./dateUtils";
+import { addDays, getWeekStart, instantToLocalDateTime, todayInTimezone } from "./dateUtils";
+import { getUserTimezone } from "@/features/auth/services/getUserTimezone";
 
 const GENERIC_ERROR_MESSAGE = "Something went wrong loading your planning data. Please try again.";
 
@@ -8,14 +9,19 @@ export async function loadEngineInputs(
   userId: string,
 ): Promise<{ ok: true; input: EngineInput } | { ok: false; message: string }> {
   const supabase = await createClient();
+  const timezone = await getUserTimezone(userId);
+  const today = todayInTimezone(timezone);
 
-  // NOTE: week boundaries here are server-local (UTC), not the user's own
-  // timezone — a commitment within an hour or two of the Mon/Sun edge could
-  // in principle land on the wrong side of this query window in the user's
-  // own timezone. Same trade-off as `today: new Date()` below: a known,
-  // narrower remaining gap, distinct from the wrong-day-entirely bug that
-  // instantToLocalDateTime fixes for every commitment away from the edges.
-  const weekStart = getWeekStart(new Date());
+  // NOTE: the query window below (weekStart/weekEnd) still uses server-local
+  // instant boundaries — a commitment within an hour or two of the Mon/Sun
+  // edge could in principle land on the wrong side of this query window in
+  // the user's own timezone. `today` itself (used for EngineInput.today,
+  // isPast, and every date-portion-only comparison) is timezone-correct as
+  // of profiles.timezone; only this specific instant-range query remains a
+  // narrower, distinct gap from the wrong-day-entirely bug that
+  // instantToLocalDateTime already fixes for every commitment away from the
+  // edges.
+  const weekStart = getWeekStart(today);
   const weekEnd = addDays(weekStart, 7);
 
   const [goalsRes, activitiesRes, constraintsRes, preferencesRes, availabilityRes, commitmentsRes] =
@@ -149,7 +155,7 @@ export async function loadEngineInputs(
   return {
     ok: true,
     input: {
-      today: new Date(),
+      today,
       goals,
       activities,
       constraints: constraintsRes.data ?? [],

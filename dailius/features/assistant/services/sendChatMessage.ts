@@ -4,7 +4,8 @@ import { requireUser } from "@/features/auth/services/requireUser";
 import { getCurrentPlan } from "@/features/planning/services/getCurrentPlan";
 import { proposeReschedule } from "@/features/planning/services/proposeReschedule";
 import { proposeFutureReschedule } from "@/features/planning/services/proposeFutureReschedule";
-import { toISODate } from "@/features/planning/services/dateUtils";
+import { toISODate, todayInTimezone } from "@/features/planning/services/dateUtils";
+import { getUserTimezone } from "@/features/auth/services/getUserTimezone";
 import { extractIntent } from "./extractIntent";
 import { extractFutureRescheduleIntent } from "./extractFutureRescheduleIntent";
 import type { SendChatMessageResult } from "../types";
@@ -24,7 +25,8 @@ export async function sendChatMessage(userMessage: string): Promise<SendChatMess
     };
   }
 
-  const todayIso = toISODate(new Date());
+  const timezone = await getUserTimezone(user.id);
+  const todayIso = toISODate(todayInTimezone(timezone));
   const scheduledBlocks = plan.blocks.filter((block) => block.status === "scheduled");
   const pastCandidates = scheduledBlocks
     .filter((block) => block.scheduledDate <= todayIso)

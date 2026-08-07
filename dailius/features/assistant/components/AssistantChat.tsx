@@ -17,7 +17,12 @@ const GREETING: ChatMessage = {
 
 const GENERIC_ERROR_MESSAGE = "Something went wrong. Please try again.";
 
-export function AssistantChat() {
+const VARIANT_CLASSES = {
+  standalone: "h-[70vh] rounded-2xl border border-gray-200 bg-white shadow-sm",
+  embedded: "h-[480px]",
+};
+
+export function AssistantChat({ variant = "standalone" }: { variant?: "standalone" | "embedded" }) {
   const [messages, setMessages] = useState<ChatMessage[]>([GREETING]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -93,7 +98,7 @@ export function AssistantChat() {
   }
 
   return (
-    <div className="flex h-[70vh] flex-col rounded-2xl border border-gray-200 bg-white shadow-sm">
+    <div className={cn("flex flex-col", VARIANT_CLASSES[variant])}>
       <div className="flex-1 space-y-4 overflow-y-auto p-6">
         {messages.map((message) => (
           <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
