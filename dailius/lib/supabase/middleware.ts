@@ -10,7 +10,6 @@ const PROTECTED_PATHS = [
   "/profile",
   "/onboarding",
   "/assistant",
-  "/report-missed-activity",
   "/add-activity",
 ];
 

@@ -7,7 +7,6 @@ const QUICK_ACTION_TILE_CLASSES =
   "inline-flex min-h-11 w-full items-center justify-center rounded-full border border-navy/25 bg-white px-4 py-2.5 text-center text-sm font-semibold text-navy transition-colors hover:border-navy/40 hover:bg-navy/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy/40 focus-visible:ring-offset-2";
 
 const LINK_ACTIONS = [
-  { href: "/report-missed-activity", label: "Report Missed Activity" },
   { href: "/add-activity", label: "Add Activity" },
   { href: "/goals", label: "Update Goals" },
 ] as const;
