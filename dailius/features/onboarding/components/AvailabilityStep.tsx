@@ -3,15 +3,10 @@
 import { useState } from "react";
 import { cn } from "@/lib/cn";
 import type { Availability, TimeRange } from "../types";
+import { MAX_TIME_OPTIONS } from "../constants";
+import { extractAvailabilityFromText } from "../services/extractAvailabilityFromText";
 import { PrimaryButton, SecondaryButton } from "./buttons";
 import { StepFooter, StepShell } from "./StepShell";
-
-const MAX_TIME_OPTIONS = [
-  { value: 30, label: "30 minutes" },
-  { value: 45, label: "45 minutes" },
-  { value: 60, label: "1 hour" },
-  { value: 120, label: "2 hours" },
-];
 
 type BlockKey =
   | "weekdayMorning"
@@ -113,9 +108,28 @@ export function AvailabilityStep({
   onNext: (availability: Availability) => void;
 }) {
   const [value, setValue] = useState<Availability>(availability);
+  const [description, setDescription] = useState("");
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestNote, setSuggestNote] = useState<string | null>(null);
 
   function set<K extends keyof Availability>(key: K, next: Availability[K]) {
     setValue((prev) => ({ ...prev, [key]: next }));
+  }
+
+  async function handleSuggest() {
+    if (!description.trim() || isSuggesting) return;
+    setIsSuggesting(true);
+    setSuggestNote(null);
+    try {
+      const result = await extractAvailabilityFromText(description, value);
+      setValue(result.availability);
+      setSuggestNote(result.note);
+    } catch (error) {
+      console.error("Failed to suggest availability:", error);
+      setSuggestNote("Sorry, something went wrong — try the toggles below.");
+    } finally {
+      setIsSuggesting(false);
+    }
   }
 
   const hasInvalidRange = (
@@ -131,6 +145,26 @@ export function AvailabilityStep({
 
   return (
     <StepShell title="When do you usually have time for flexible activities?">
+      <label className="block text-sm">
+        <span className="font-semibold text-navy">Describe your availability</span>
+        <textarea
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          disabled={isSuggesting}
+          placeholder="e.g. I'm usually free weekday evenings after 6 and most of the weekend"
+          rows={2}
+          className="mt-1.5 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-to focus:outline-none focus:ring-2 focus:ring-brand-to disabled:cursor-not-allowed disabled:opacity-70"
+        />
+      </label>
+      <div className="mt-2">
+        <SecondaryButton onClick={handleSuggest} disabled={!description.trim() || isSuggesting}>
+          {isSuggesting ? "Thinking..." : "Suggest"}
+        </SecondaryButton>
+        {suggestNote ? <p className="mt-2 text-xs text-gray-500">{suggestNote}</p> : null}
+      </div>
+
+      <p className="mb-2 mt-6 text-sm text-gray-500">…or set it manually:</p>
+
       <div>
         <p className="text-sm font-semibold text-navy">Weekdays</p>
         <div className="mt-2 space-y-3">

@@ -2,24 +2,18 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/cn";
-import type { RecurringActivitySelection } from "../types";
+import type { OnboardingChatMessage, RecurringActivitySelection } from "../types";
+import { ACTIVITY_OPTIONS, DAY_OPTIONS, DURATION_OPTIONS, TIME_OPTIONS } from "../constants";
+import { extractActivitiesFromChat } from "../services/extractActivitiesFromChat";
+import { ChatPanel } from "./ChatPanel";
 import { PrimaryButton, SecondaryButton } from "./buttons";
 import { StepFooter, StepShell } from "./StepShell";
 
-const ACTIVITY_OPTIONS = [
-  "Gym",
-  "Soccer",
-  "Church",
-  "Language Class",
-  "Music Lessons",
-  "Volunteering",
-  "Study",
-  "Other",
-] as const;
-
-const DURATION_OPTIONS = [15, 30, 45, 60, 90];
-const DAY_OPTIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const TIME_OPTIONS = ["Morning", "Afternoon", "Evening"];
+const GREETING: OnboardingChatMessage = {
+  id: "greeting",
+  role: "assistant",
+  text: "Tell me about any recurring commitments — I can pick from the list below and fill in the details.",
+};
 
 function keyFor(label: string): string {
   return label.toLowerCase().replace(/\s+/g, "-");
@@ -35,6 +29,31 @@ export function RecurringActivitiesStep({
   onNext: (activities: RecurringActivitySelection[]) => void;
 }) {
   const [selected, setSelected] = useState<RecurringActivitySelection[]>(activities);
+  const [messages, setMessages] = useState<OnboardingChatMessage[]>([GREETING]);
+  const [isSending, setIsSending] = useState(false);
+
+  async function handleSend(text: string) {
+    const nextMessages: OnboardingChatMessage[] = [...messages, { id: crypto.randomUUID(), role: "user", text }];
+    setMessages(nextMessages);
+    setIsSending(true);
+    try {
+      const result = await extractActivitiesFromChat(
+        messages.map(({ role, text: turnText }) => ({ role, text: turnText })),
+        text,
+        selected,
+      );
+      setSelected(result.activities);
+      setMessages([...nextMessages, { id: crypto.randomUUID(), role: "assistant", text: result.reply }]);
+    } catch (error) {
+      console.error("Failed to send onboarding chat message:", error);
+      setMessages([
+        ...nextMessages,
+        { id: crypto.randomUUID(), role: "assistant", text: "Sorry, something went wrong — you can still pick manually below." },
+      ]);
+    } finally {
+      setIsSending(false);
+    }
+  }
 
   function toggle(label: string) {
     const key = keyFor(label);
@@ -80,6 +99,15 @@ export function RecurringActivitiesStep({
       title="Any recurring activities?"
       description="Commitments that should regularly appear on your schedule."
     >
+      <ChatPanel
+        messages={messages}
+        onSend={handleSend}
+        isSending={isSending}
+        placeholder="e.g. I play soccer on Tuesdays and go to church Sunday mornings"
+      />
+
+      <p className="mb-2 mt-6 text-sm text-gray-500">…or pick manually:</p>
+
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {ACTIVITY_OPTIONS.map((label) => {
           const key = keyFor(label);
@@ -89,9 +117,10 @@ export function RecurringActivitiesStep({
               key={key}
               type="button"
               onClick={() => toggle(label)}
+              disabled={isSending}
               aria-pressed={active}
               className={cn(
-                "rounded-xl border px-4 py-3 text-center text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-to",
+                "rounded-xl border px-4 py-3 text-center text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-to disabled:cursor-not-allowed disabled:opacity-60",
                 active
                   ? "border-brand-to bg-brand-to/[0.08] text-navy"
                   : "border-gray-200 bg-white text-gray-700 hover:border-brand-to/40",
@@ -112,8 +141,9 @@ export function RecurringActivitiesStep({
                   type="text"
                   value={activity.name}
                   onChange={(event) => update(activity.key, { name: event.target.value })}
+                  disabled={isSending}
                   placeholder="Activity name"
-                  className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-navy focus:border-brand-to focus:outline-none focus:ring-2 focus:ring-brand-to"
+                  className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-navy focus:border-brand-to focus:outline-none focus:ring-2 focus:ring-brand-to disabled:cursor-not-allowed disabled:opacity-60"
                 />
               ) : (
                 <p className="text-sm font-semibold text-navy">{activity.label}</p>
@@ -127,7 +157,8 @@ export function RecurringActivitiesStep({
                     onChange={(event) =>
                       update(activity.key, { durationMinutes: Number(event.target.value) })
                     }
-                    className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-to focus:outline-none focus:ring-2 focus:ring-brand-to"
+                    disabled={isSending}
+                    className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-to focus:outline-none focus:ring-2 focus:ring-brand-to disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {DURATION_OPTIONS.map((minutes) => (
                       <option key={minutes} value={minutes}>
@@ -143,7 +174,8 @@ export function RecurringActivitiesStep({
                     onChange={(event) =>
                       update(activity.key, { preferredTimeOfDay: event.target.value || null })
                     }
-                    className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-to focus:outline-none focus:ring-2 focus:ring-brand-to"
+                    disabled={isSending}
+                    className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-to focus:outline-none focus:ring-2 focus:ring-brand-to disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <option value="">No preference</option>
                     {TIME_OPTIONS.map((time) => (
@@ -165,9 +197,10 @@ export function RecurringActivitiesStep({
                         key={day}
                         type="button"
                         onClick={() => toggleDay(activity.key, day)}
+                        disabled={isSending}
                         aria-pressed={on}
                         className={cn(
-                          "rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-to",
+                          "rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-to disabled:cursor-not-allowed disabled:opacity-60",
                           on
                             ? "border-brand-to bg-brand-to/[0.08] text-navy"
                             : "border-gray-200 bg-white text-gray-600 hover:border-brand-to/40",
@@ -185,7 +218,8 @@ export function RecurringActivitiesStep({
                   type="checkbox"
                   checked={activity.flexible}
                   onChange={(event) => update(activity.key, { flexible: event.target.checked })}
-                  className="h-4 w-4 rounded border-gray-300 text-brand-to focus:ring-brand-to"
+                  disabled={isSending}
+                  className="h-4 w-4 rounded border-gray-300 text-brand-to focus:ring-brand-to disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 Flexible timing
               </label>

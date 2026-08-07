@@ -37,6 +37,12 @@ export type Preferences = {
   planningStyle: PlanningStyle | null;
 };
 
+export type OnboardingChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+};
+
 export type OnboardingData = {
   calendarSkipped: boolean;
   calendarConnected: boolean;

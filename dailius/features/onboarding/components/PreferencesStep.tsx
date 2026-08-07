@@ -3,20 +3,10 @@
 import { useState } from "react";
 import { cn } from "@/lib/cn";
 import type { PlanningStyle, Preferences } from "../types";
+import { AVOID_AFTER_OPTIONS, PROTECT_OPTIONS, WORKOUT_LENGTH_OPTIONS } from "../constants";
+import { extractPreferencesFromText } from "../services/extractPreferencesFromText";
 import { PrimaryButton, SecondaryButton } from "./buttons";
 import { StepFooter, StepShell } from "./StepShell";
-
-const AVOID_AFTER_OPTIONS = [
-  { value: "18:00", label: "6:00 PM" },
-  { value: "19:00", label: "7:00 PM" },
-  { value: "20:00", label: "8:00 PM" },
-  { value: "21:00", label: "9:00 PM" },
-  { value: "22:00", label: "10:00 PM" },
-];
-
-const PROTECT_OPTIONS = ["Family Dinner", "Sleep", "School Pickup", "Sunday Rest", "Personal Time"];
-
-const WORKOUT_LENGTH_OPTIONS = [30, 45, 60, 90];
 
 const PLANNING_STYLE_OPTIONS: { value: PlanningStyle; label: string }[] = [
   { value: "relaxed", label: "Keep my schedule relaxed" },
@@ -34,9 +24,28 @@ export function PreferencesStep({
   onNext: (preferences: Preferences) => void;
 }) {
   const [value, setValue] = useState<Preferences>(preferences);
+  const [description, setDescription] = useState("");
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestNote, setSuggestNote] = useState<string | null>(null);
 
   function set<K extends keyof Preferences>(key: K, next: Preferences[K]) {
     setValue((prev) => ({ ...prev, [key]: next }));
+  }
+
+  async function handleSuggest() {
+    if (!description.trim() || isSuggesting) return;
+    setIsSuggesting(true);
+    setSuggestNote(null);
+    try {
+      const result = await extractPreferencesFromText(description, value);
+      setValue(result.preferences);
+      setSuggestNote(result.note);
+    } catch (error) {
+      console.error("Failed to suggest preferences:", error);
+      setSuggestNote("Sorry, something went wrong — use the options below.");
+    } finally {
+      setIsSuggesting(false);
+    }
   }
 
   function toggleProtected(label: string) {
@@ -53,6 +62,26 @@ export function PreferencesStep({
       title="Scheduling preferences"
       description="Fine-tune how Dailius should plan around your life."
     >
+      <label className="block text-sm">
+        <span className="font-semibold text-navy">Describe your preferences</span>
+        <textarea
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          disabled={isSuggesting}
+          placeholder="e.g. Don't schedule anything after 9pm, keep Sunday mornings free, I like a relaxed pace"
+          rows={2}
+          className="mt-1.5 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-to focus:outline-none focus:ring-2 focus:ring-brand-to disabled:cursor-not-allowed disabled:opacity-70"
+        />
+      </label>
+      <div className="mt-2">
+        <SecondaryButton onClick={handleSuggest} disabled={!description.trim() || isSuggesting}>
+          {isSuggesting ? "Thinking..." : "Suggest"}
+        </SecondaryButton>
+        {suggestNote ? <p className="mt-2 text-xs text-gray-500">{suggestNote}</p> : null}
+      </div>
+
+      <p className="mb-2 mt-6 text-sm text-gray-500">…or set it manually:</p>
+
       <label className="block text-sm">
         <span className="font-semibold text-navy">Avoid scheduling after</span>
         <select
