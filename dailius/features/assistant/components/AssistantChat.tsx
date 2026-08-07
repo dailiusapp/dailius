@@ -12,7 +12,7 @@ import type { ChatMessage, PendingOptions } from "../types";
 const GREETING: ChatMessage = {
   id: "greeting",
   role: "assistant",
-  text: "Tell me about a missed activity and I'll find a new time for it — try something like \"I missed my Tuesday workout.\"",
+  text: "Tell me about a missed activity or ask me to move an upcoming one — try something like \"I missed my Tuesday workout\" or \"move Friday's run to Saturday.\"",
 };
 
 const GENERIC_ERROR_MESSAGE = "Something went wrong. Please try again.";
@@ -179,7 +179,7 @@ export function AssistantChat() {
           value={input}
           disabled={isSending}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="I missed my Tuesday workout..."
+          placeholder="I missed my Tuesday workout, or move Friday's run to Saturday..."
           className="min-h-11 flex-1 rounded-full border border-gray-300 px-4 py-2.5 text-[15px] text-gray-900 placeholder:text-gray-400 focus:border-brand-to focus:outline-none focus:ring-2 focus:ring-brand-to disabled:cursor-not-allowed disabled:opacity-70"
         />
         <button

@@ -3,9 +3,14 @@
 import { requireUser } from "@/features/auth/services/requireUser";
 import { getCurrentPlan } from "@/features/planning/services/getCurrentPlan";
 import { proposeReschedule } from "@/features/planning/services/proposeReschedule";
+import { proposeFutureReschedule } from "@/features/planning/services/proposeFutureReschedule";
 import { toISODate } from "@/features/planning/services/dateUtils";
 import { extractIntent } from "./extractIntent";
+import { extractFutureRescheduleIntent } from "./extractFutureRescheduleIntent";
 import type { SendChatMessageResult } from "../types";
+
+const COULD_NOT_UNDERSTAND_REPLY =
+  "I couldn't tell which activity you meant. Try naming it and the day, like \"I missed my Tuesday workout\" or \"move Friday's run to Saturday.\"";
 
 export async function sendChatMessage(userMessage: string): Promise<SendChatMessageResult> {
   const user = await requireUser();
@@ -20,8 +25,17 @@ export async function sendChatMessage(userMessage: string): Promise<SendChatMess
   }
 
   const todayIso = toISODate(new Date());
-  const candidates = plan.blocks
-    .filter((block) => block.status === "scheduled" && block.scheduledDate <= todayIso)
+  const scheduledBlocks = plan.blocks.filter((block) => block.status === "scheduled");
+  const pastCandidates = scheduledBlocks
+    .filter((block) => block.scheduledDate <= todayIso)
+    .map((block) => ({
+      id: block.id,
+      activityName: block.activityName,
+      dayLabel: block.scheduledDate,
+      scheduledDate: block.scheduledDate,
+    }));
+  const futureCandidates = scheduledBlocks
+    .filter((block) => block.scheduledDate > todayIso)
     .map((block) => ({
       id: block.id,
       activityName: block.activityName,
@@ -29,32 +43,45 @@ export async function sendChatMessage(userMessage: string): Promise<SendChatMess
       scheduledDate: block.scheduledDate,
     }));
 
-  if (candidates.length === 0) {
+  if (pastCandidates.length === 0 && futureCandidates.length === 0) {
     return {
-      reply: "You don't have any activities from earlier this week to report as missed.",
+      reply: "You don't have any activities scheduled this week yet.",
       block: null,
       options: null,
     };
   }
 
-  const { blockId } = await extractIntent(userMessage, todayIso, candidates);
-  if (!blockId) {
-    return {
-      reply:
-        "I couldn't tell which activity you meant. Try naming it and the day, like \"I missed my Tuesday workout.\"",
-      block: null,
-      options: null,
-    };
+  if (pastCandidates.length > 0) {
+    const { blockId } = await extractIntent(userMessage, todayIso, pastCandidates);
+    if (blockId) {
+      const proposal = await proposeReschedule(blockId);
+      if (!proposal.ok) {
+        return { reply: proposal.message, block: null, options: null };
+      }
+
+      return {
+        reply: `Sorry you missed ${proposal.missedActivityName} on ${proposal.missedDayLabel}. Here are a few times that could work — pick one:`,
+        block: null,
+        options: { blockId, drafts: proposal.options },
+      };
+    }
   }
 
-  const proposal = await proposeReschedule(blockId);
-  if (!proposal.ok) {
-    return { reply: proposal.message, block: null, options: null };
+  if (futureCandidates.length > 0) {
+    const { blockId, targetDayLabel } = await extractFutureRescheduleIntent(userMessage, todayIso, futureCandidates);
+    if (blockId) {
+      const proposal = await proposeFutureReschedule(blockId, targetDayLabel);
+      if (!proposal.ok) {
+        return { reply: proposal.message, block: null, options: null };
+      }
+
+      return {
+        reply: `Let's move ${proposal.activityName} off ${proposal.currentDayLabel} — here are some options:`,
+        block: null,
+        options: { blockId, drafts: proposal.options },
+      };
+    }
   }
 
-  return {
-    reply: `Sorry you missed ${proposal.missedActivityName} on ${proposal.missedDayLabel}. Here are a few times that could work — pick one:`,
-    block: null,
-    options: { blockId, drafts: proposal.options },
-  };
+  return { reply: COULD_NOT_UNDERSTAND_REPLY, block: null, options: null };
 }
