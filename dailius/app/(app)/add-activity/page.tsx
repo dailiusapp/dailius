@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import { requireUser } from "@/features/auth/services/requireUser";
 import { DashboardCard } from "@/features/dashboard/components/DashboardCard";
 import { AddActivityForm } from "@/features/activities/components/AddActivityForm";
+import { getGoalsForUser } from "@/features/goals/services/getGoalsForUser";
 
 export const metadata: Metadata = { title: "Add Activity — Dailius" };
 
 export default async function AddActivityPage() {
-  await requireUser();
+  const user = await requireUser();
+  const goals = await getGoalsForUser(user.id, { status: "active" });
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-10 sm:px-8 lg:px-12">
@@ -17,7 +19,7 @@ export default async function AddActivityPage() {
 
       <div className="mt-8">
         <DashboardCard title="New Activity">
-          <AddActivityForm />
+          <AddActivityForm initialGoals={goals} />
         </DashboardCard>
       </div>
     </div>

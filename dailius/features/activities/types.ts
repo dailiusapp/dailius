@@ -8,6 +8,7 @@ export type CreateActivityInput = {
   preferredFrequency: string | null; // used when frequencyMode === "timesPerWeek"
   preferredTimeOfDay: string | null;
   flexible: boolean;
+  goalIds: string[];
 };
 
 export type ActivityFieldErrors = "name" | "preferredDays" | "preferredFrequency";

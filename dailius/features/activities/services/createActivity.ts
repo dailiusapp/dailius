@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/auth/services/requireUser";
 import { createClient } from "@/lib/supabase/server";
 import type { CreateActivityInput, CreateActivityResult } from "../types";
@@ -44,6 +45,18 @@ export async function createActivity(input: CreateActivityInput): Promise<Create
 
   if (error) {
     return { ok: false, message: "Something went wrong adding that activity. Please try again." };
+  }
+
+  if (input.goalIds.length > 0) {
+    const { error: linkError } = await supabase
+      .from("activity_goals")
+      .insert(input.goalIds.map((goalId) => ({ activity_id: data.id, goal_id: goalId })));
+
+    if (linkError) {
+      console.error("Failed to link new activity to goals:", linkError);
+    } else {
+      revalidatePath("/goals");
+    }
   }
 
   return { ok: true, activityId: data.id };

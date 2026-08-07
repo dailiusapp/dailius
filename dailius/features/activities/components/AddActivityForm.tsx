@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/cn";
 import { FormField } from "@/features/auth/components/FormField";
+import type { Goal } from "@/features/goals/types";
 import { createActivity } from "../services/createActivity";
 import type { ActivityFieldErrors, FrequencyMode } from "../types";
 
@@ -21,7 +23,7 @@ const DEFAULTS = {
   flexible: true,
 };
 
-export function AddActivityForm() {
+export function AddActivityForm({ initialGoals }: { initialGoals: Goal[] }) {
   const [name, setName] = useState(DEFAULTS.name);
   const [durationMinutes, setDurationMinutes] = useState(DEFAULTS.durationMinutes);
   const [frequencyMode, setFrequencyMode] = useState<FrequencyMode>(DEFAULTS.frequencyMode);
@@ -29,6 +31,7 @@ export function AddActivityForm() {
   const [preferredFrequency, setPreferredFrequency] = useState<string | null>(DEFAULTS.preferredFrequency);
   const [preferredTimeOfDay, setPreferredTimeOfDay] = useState<string | null>(DEFAULTS.preferredTimeOfDay);
   const [flexible, setFlexible] = useState(DEFAULTS.flexible);
+  const [goalIds, setGoalIds] = useState<string[]>([]);
 
   const [fieldError, setFieldError] = useState<Partial<Record<ActivityFieldErrors, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -37,6 +40,10 @@ export function AddActivityForm() {
 
   function toggleDay(day: string) {
     setPreferredDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]));
+  }
+
+  function toggleGoal(goalId: string) {
+    setGoalIds((prev) => (prev.includes(goalId) ? prev.filter((id) => id !== goalId) : [...prev, goalId]));
   }
 
   function switchMode(mode: FrequencyMode) {
@@ -53,6 +60,7 @@ export function AddActivityForm() {
     setPreferredFrequency(DEFAULTS.preferredFrequency);
     setPreferredTimeOfDay(DEFAULTS.preferredTimeOfDay);
     setFlexible(DEFAULTS.flexible);
+    setGoalIds([]);
   }
 
   function validate(): Partial<Record<ActivityFieldErrors, string>> {
@@ -88,6 +96,7 @@ export function AddActivityForm() {
       preferredFrequency,
       preferredTimeOfDay,
       flexible,
+      goalIds,
     });
     setIsSubmitting(false);
 
@@ -236,6 +245,42 @@ export function AddActivityForm() {
           ))}
         </select>
       </label>
+
+      <div>
+        <span className="text-sm font-medium text-navy">Link to goal(s)</span>
+        {initialGoals.length === 0 ? (
+          <p className="mt-1.5 text-sm text-gray-500">
+            You don&apos;t have any goals yet —{" "}
+            <Link href="/goals" className="font-medium text-navy underline underline-offset-2">
+              create one on the Goals page
+            </Link>{" "}
+            to link it here.
+          </p>
+        ) : (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {initialGoals.map((goal) => {
+              const on = goalIds.includes(goal.id);
+              return (
+                <button
+                  key={goal.id}
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => toggleGoal(goal.id)}
+                  aria-pressed={on}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-to disabled:cursor-not-allowed disabled:opacity-60",
+                    on
+                      ? "border-brand-to bg-brand-to/[0.08] text-navy"
+                      : "border-gray-200 bg-white text-gray-600 hover:border-brand-to/40",
+                  )}
+                >
+                  {goal.title}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <label className="flex items-center gap-2 text-sm text-gray-600">
         <input
