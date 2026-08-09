@@ -114,3 +114,82 @@ export type EngineResult = {
   blocks: ScheduledBlockDraft[];
   unplacedCount: number;
 };
+
+// --- AI-assisted planning: operations, triggers, validation (docs/requirements/scheduling refactoring.md) ---
+
+// Day-granularity only (no exact time) — the AI proposes WHAT should move
+// and roughly WHEN, the deterministic engine's existing slot search
+// (placeOccurrenceCandidates) always decides the exact time. Keyed by real
+// scheduled_blocks ids (blockId) rather than activityId+occurrence-index,
+// since a block row is this schema's actual unit of identity and an
+// activity can have multiple blocks in one week.
+export type PlanningOperation =
+  | { type: "MOVE_ACTIVITY"; blockId: string; targetDate: string }
+  | { type: "ADD_ACTIVITY"; activityId: string; targetDate: string }
+  | { type: "REMOVE_ACTIVITY"; blockId: string }
+  | { type: "CHANGE_PRIORITY"; goalId: string; newPriority: GoalPriority };
+
+export type PlanningTrigger =
+  | { type: "MISSED_ACTIVITY"; blockId: string }
+  | { type: "FUTURE_MOVE"; blockId: string; targetDayLabel: string | null }
+  | { type: "PRIORITY_CHANGE"; goalId: string; newPriority: GoalPriority }
+  | { type: "UNKNOWN" };
+
+export type ViolationType =
+  | "TIME_CONFLICT"
+  | "PROTECTED_TIME"
+  | "AVAILABILITY"
+  | "MAX_DAILY_DURATION"
+  | "EXERCISE_CUTOFF";
+
+export type Violation = {
+  type: ViolationType;
+  activityName: string;
+  detail: string;
+  date?: string;
+};
+
+// Compact, purpose-built AI-facing context (docs §7-8) — deliberately not
+// the full EngineInput: no historical data, no unrelated user data, no
+// database internals.
+export type PlanningContextGoal = { id: string; title: string; priority: GoalPriority };
+
+export type PlanningContextActivity = {
+  id: string;
+  name: string;
+  durationMinutes: number;
+  flexible: boolean;
+  preferredDays: string[];
+  preferredTimeOfDay: string | null;
+  goalTitles: string[];
+};
+
+export type PlanningContextConstraint = { type: string; value: string };
+
+export type PlanningContextBlock = {
+  blockId: string;
+  activityId: string;
+  activityName: string;
+  scheduledDate: string;
+  startTime: string;
+  endTime: string;
+  status: ScheduledBlockStatus;
+};
+
+export type PlanningContextCommitment = { title: string; scheduledDate: string; startTime: string; endTime: string };
+
+export type PlanningContext = {
+  today: string; // "YYYY-MM-DD"
+  trigger: PlanningTrigger;
+  userMessage: string;
+  goals: PlanningContextGoal[];
+  activities: PlanningContextActivity[];
+  constraints: PlanningContextConstraint[];
+  scheduledBlocks: PlanningContextBlock[];
+  commitments: PlanningContextCommitment[];
+  priorViolations?: Violation[];
+};
+
+export type PlanningLoopResult =
+  | { ok: true; summary: string; operations: PlanningOperation[]; previewBlocks: ScheduledBlockDraft[]; attempts: number }
+  | { ok: false; reason: string; attempts: number; lastViolations: Violation[] };

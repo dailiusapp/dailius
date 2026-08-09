@@ -2,17 +2,14 @@
 
 import { useState, type FormEvent } from "react";
 import { cn } from "@/lib/cn";
-import { ScheduledBlockRow } from "@/features/planning/components/ScheduledBlockRow";
-import { dayOfWeekLabel, formatClockTime, parseISODate } from "@/features/planning/services/dateUtils";
-import type { ScheduledBlockDraft } from "@/features/planning/types";
 import { sendChatMessage } from "../services/sendChatMessage";
-import { confirmChatReschedule } from "../services/confirmChatReschedule";
-import type { ChatMessage, PendingOptions } from "../types";
+import { confirmChatReplan } from "../services/confirmChatReplan";
+import type { ChatMessage, PendingProposal } from "../types";
 
 const GREETING: ChatMessage = {
   id: "greeting",
   role: "assistant",
-  text: "Tell me about a missed activity or ask me to move an upcoming one — try something like \"I missed my Tuesday workout\" or \"move Friday's run to Saturday.\"",
+  text: "Tell me about a missed activity, ask me to move an upcoming one, or ask me to prioritize a goal — try something like \"I missed my Tuesday workout,\" \"move Friday's run to Saturday,\" or \"prioritize running.\"",
 };
 
 const GENERIC_ERROR_MESSAGE = "Something went wrong. Please try again.";
@@ -44,8 +41,7 @@ export function AssistantChat({ variant = "standalone" }: { variant?: "standalon
           id: crypto.randomUUID(),
           role: "assistant",
           text: result.reply,
-          block: result.block ?? undefined,
-          options: result.options ?? undefined,
+          proposal: result.proposal ?? undefined,
         },
       ]);
     } catch (error) {
@@ -59,35 +55,32 @@ export function AssistantChat({ variant = "standalone" }: { variant?: "standalon
     }
   }
 
-  function clearOptions(messageId: string) {
-    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, options: undefined } : m)));
+  function clearProposal(messageId: string) {
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, proposal: undefined } : m)));
   }
 
-  function handleDismissOptions(messageId: string) {
-    clearOptions(messageId);
+  function handleKeepCurrentPlan(messageId: string) {
+    clearProposal(messageId);
     setMessages((prev) => [
       ...prev,
       {
         id: crypto.randomUUID(),
         role: "assistant",
-        text: "No problem — let me know if you'd like different options.",
+        text: "No problem — your current schedule is unchanged. Let me know if you'd like something different.",
       },
     ]);
   }
 
-  async function handleChooseOption(messageId: string, options: PendingOptions, draft: ScheduledBlockDraft) {
+  async function handleAcceptProposal(messageId: string, proposal: PendingProposal) {
     if (isSending) return;
-    clearOptions(messageId);
+    clearProposal(messageId);
     setIsSending(true);
 
     try {
-      const result = await confirmChatReschedule(options.blockId, draft);
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: "assistant", text: result.reply, block: result.block ?? undefined },
-      ]);
+      const result = await confirmChatReplan(proposal.operations);
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", text: result.reply }]);
     } catch (error) {
-      console.error("Failed to confirm reschedule:", error);
+      console.error("Failed to confirm plan changes:", error);
       setMessages((prev) => [
         ...prev,
         { id: crypto.randomUUID(), role: "assistant", text: GENERIC_ERROR_MESSAGE },
@@ -111,39 +104,33 @@ export function AssistantChat({ variant = "standalone" }: { variant?: "standalon
               )}
             >
               <p>{message.text}</p>
-              {message.block ? (
-                <ul className="mt-3">
-                  <ScheduledBlockRow block={message.block} />
-                </ul>
-              ) : null}
-              {message.options ? (
-                <div className="mt-3 space-y-2">
-                  {message.options.drafts.map((draft, index) => {
-                    const dayLabel = dayOfWeekLabel(parseISODate(draft.scheduledDate));
-                    const timeRange = `${formatClockTime(draft.startTime)}–${formatClockTime(draft.endTime)}`;
-                    return (
-                      <button
-                        key={`${draft.scheduledDate}-${draft.startTime}-${index}`}
-                        type="button"
-                        disabled={isSending}
-                        onClick={() => handleChooseOption(message.id, message.options!, draft)}
-                        className="block w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-left text-sm text-gray-800 transition-colors hover:border-brand-to hover:bg-brand-to/5 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <p className="font-medium text-navy">
-                          {dayLabel} {timeRange}
-                        </p>
-                        <p className="mt-0.5 text-[13px] leading-5 text-gray-500">{draft.rationale}</p>
-                      </button>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    disabled={isSending}
-                    onClick={() => handleDismissOptions(message.id)}
-                    className="text-sm font-medium text-gray-500 underline underline-offset-2 hover:text-navy disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    None of these work
-                  </button>
+              {message.proposal ? (
+                <div className="mt-3 space-y-3">
+                  <ul className="space-y-1.5 rounded-xl border border-gray-200 bg-white px-4 py-3">
+                    {message.proposal.changeDescriptions.map((line, index) => (
+                      <li key={index} className="text-sm text-gray-800">
+                        • {line}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={isSending}
+                      onClick={() => handleAcceptProposal(message.id, message.proposal!)}
+                      className="rounded-full bg-gradient-to-b from-brand-from to-brand-to px-4 py-2 text-sm font-semibold text-white transition-transform duration-150 ease-out hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Accept Changes
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSending}
+                      onClick={() => handleKeepCurrentPlan(message.id)}
+                      className="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Keep Current Plan
+                    </button>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -184,7 +171,7 @@ export function AssistantChat({ variant = "standalone" }: { variant?: "standalon
           value={input}
           disabled={isSending}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="I missed my Tuesday workout, or move Friday's run to Saturday..."
+          placeholder="I missed my Tuesday workout, move Friday's run, or prioritize running..."
           className="min-h-11 flex-1 rounded-full border border-gray-300 px-4 py-2.5 text-[15px] text-gray-900 placeholder:text-gray-400 focus:border-brand-to focus:outline-none focus:ring-2 focus:ring-brand-to disabled:cursor-not-allowed disabled:opacity-70"
         />
         <button

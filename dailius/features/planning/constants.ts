@@ -13,3 +13,11 @@ export const STATUS_LABELS: Record<ScheduledBlockStatus, string> = {
   missed: "Missed",
   cancelled: "Cancelled",
 };
+
+// docs/requirements/scheduling refactoring.md §18: "Default: 3 AI planning
+// attempts per planning operation. Never allow an infinite AI retry loop."
+export const MAX_PLANNING_ATTEMPTS = 3;
+
+// §19: "Design architecture that supports different AI models for
+// different levels of complexity... the model should be configurable."
+export const AI_PLANNER_MODEL = process.env.AI_PLANNER_MODEL ?? "gpt-4o-mini";
