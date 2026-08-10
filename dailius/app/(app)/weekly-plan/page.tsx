@@ -32,7 +32,7 @@ export default async function WeeklyPlanPage({
     week && isValidISODate(week) ? toISODate(getWeekStart(parseISODate(week))) : currentWeekStart;
   const isCurrentWeek = weekStart === currentWeekStart;
 
-  const plan = onboardingCompleted ? await getPlanForWeek(user.id, weekStart) : null;
+  const plan = onboardingCompleted ? await getPlanForWeek(user.id, weekStart, profile?.timezone ?? null) : null;
   const days = Array.from({ length: 7 }, (_, index) => addDays(parseISODate(weekStart), index));
 
   return (

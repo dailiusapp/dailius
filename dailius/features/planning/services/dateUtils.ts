@@ -84,6 +84,42 @@ export function instantToLocalDateTime(isoInstant: string, timeZone: string): { 
   };
 }
 
+// Inverse of `instantToLocalDateTime` — Intl only exposes zone-aware
+// *formatting*, not zone-aware *parsing*, so there's no direct way to turn a
+// wall-clock date+time into the UTC instant that would display as that time
+// in `timeZone`. Instead: assume the wall time is UTC, ask Intl what that
+// guess actually looks like in `timeZone`, and shift by the difference. A
+// single pass is exact here because commitments are always in the near
+// future, so `guess` and the true instant fall on the same side of any DST
+// transition for `timeZone`.
+function getTimezoneOffsetMinutes(timeZone: string, date: Date): number {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const parts = formatter.formatToParts(date);
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+  const asUTC = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return (asUTC - date.getTime()) / 60_000;
+}
+
+// Converts a local "YYYY-MM-DD" date + "HH:MM" time, as picked by a user in
+// `timeZone`, into the UTC instant it represents — e.g. for storing a
+// manually-added commitment's `start_time`/`end_time` timestamptz.
+export function localDateTimeToInstant(date: string, time: string, timeZone: string): Date {
+  const [year, month, day] = date.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  const naiveUtcMs = Date.UTC(year, month - 1, day, hour, minute, 0);
+  const offsetMinutes = getTimezoneOffsetMinutes(timeZone, new Date(naiveUtcMs));
+  return new Date(naiveUtcMs - offsetMinutes * 60_000);
+}
+
 // Returns a Date whose local-getter-read calendar date (year/month/day)
 // matches "today" in the given IANA timezone — a drop-in replacement for
 // `new Date()` at every call site that only ever reads the date portion

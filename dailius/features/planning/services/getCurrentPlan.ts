@@ -5,5 +5,5 @@ import type { WeeklyPlan } from "../types";
 
 export async function getCurrentPlan(userId: string): Promise<WeeklyPlan | null> {
   const timezone = await getUserTimezone(userId);
-  return getPlanForWeek(userId, toISODate(getWeekStart(todayInTimezone(timezone))));
+  return getPlanForWeek(userId, toISODate(getWeekStart(todayInTimezone(timezone))), timezone);
 }

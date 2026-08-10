@@ -1,4 +1,4 @@
-export type FrequencyMode = "days" | "timesPerWeek";
+export type FrequencyMode = "days" | "timesPerWeek" | "oneTime";
 
 export type CreateActivityInput = {
   name: string;
@@ -9,9 +9,11 @@ export type CreateActivityInput = {
   preferredTimeOfDay: string | null;
   flexible: boolean;
   goalIds: string[];
+  scheduledDate: string | null; // "YYYY-MM-DD", used when frequencyMode === "oneTime"
+  scheduledTime: string | null; // "HH:MM", used when frequencyMode === "oneTime"
 };
 
-export type ActivityFieldErrors = "name" | "preferredDays" | "preferredFrequency";
+export type ActivityFieldErrors = "name" | "preferredDays" | "preferredFrequency" | "scheduledDate" | "scheduledTime";
 
 export type CreateActivityResult =
   | { ok: true; activityId: string }

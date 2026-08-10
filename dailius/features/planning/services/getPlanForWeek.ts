@@ -1,8 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import type { ScheduledBlockStatus, WeeklyPlan, WeeklyPlanStatus } from "../types";
-import { addDays, instantToLocalDateTime, parseISODate } from "./dateUtils";
+import { addDays, instantToLocalDateTime, localDateTimeToInstant, parseISODate, toISODate } from "./dateUtils";
 
-export async function getPlanForWeek(userId: string, weekStart: string): Promise<WeeklyPlan | null> {
+export async function getPlanForWeek(
+  userId: string,
+  weekStart: string,
+  timezone: string | null,
+): Promise<WeeklyPlan | null> {
   const supabase = await createClient();
 
   const { data: planRow, error: planError } = await supabase
@@ -21,7 +25,16 @@ export async function getPlanForWeek(userId: string, weekStart: string): Promise
     return null;
   }
 
-  const weekEndDate = addDays(parseISODate(weekStart), 7);
+  // Bounds must be the user's own local midnight, not the server's — the
+  // server runs in UTC, so a commitment near the start/end of the user's
+  // week (e.g. a evening pick in a timezone behind UTC) can have a UTC
+  // instant that falls on the adjacent UTC calendar day, landing just
+  // outside a server-local window even though it's correctly "this week"
+  // for the user.
+  const tz = timezone ?? "UTC";
+  const weekEndISO = toISODate(addDays(parseISODate(weekStart), 7));
+  const weekStartInstant = localDateTimeToInstant(weekStart, "00:00", tz);
+  const weekEndInstant = localDateTimeToInstant(weekEndISO, "00:00", tz);
 
   const [blocksRes, commitmentsRes] = await Promise.all([
     supabase
@@ -34,8 +47,8 @@ export async function getPlanForWeek(userId: string, weekStart: string): Promise
       .from("commitments")
       .select("id, title, start_time, end_time, timezone, source")
       .eq("user_id", userId)
-      .gte("start_time", parseISODate(weekStart).toISOString())
-      .lt("start_time", weekEndDate.toISOString()),
+      .gte("start_time", weekStartInstant.toISOString())
+      .lt("start_time", weekEndInstant.toISOString()),
   ]);
 
   if (blocksRes.error) {
