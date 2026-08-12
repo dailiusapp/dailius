@@ -72,9 +72,6 @@ export async function createActivity(input: CreateActivityInput): Promise<Create
     const planResult = await generatePlan();
     if (!planResult.ok) {
       console.error("Failed to regenerate plan after adding activity:", planResult.message);
-    } else {
-      revalidatePath("/weekly-plan");
-      revalidatePath("/dashboard");
     }
 
     return { ok: true, activityId: data.id };
@@ -116,9 +113,6 @@ export async function createActivity(input: CreateActivityInput): Promise<Create
   const planResult = await generatePlan();
   if (!planResult.ok) {
     console.error("Failed to regenerate plan after adding activity:", planResult.message);
-  } else {
-    revalidatePath("/weekly-plan");
-    revalidatePath("/dashboard");
   }
 
   return { ok: true, activityId: data.id };

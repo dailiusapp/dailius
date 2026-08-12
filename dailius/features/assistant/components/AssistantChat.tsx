@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { sendChatMessage } from "../services/sendChatMessage";
 import { confirmChatReplan } from "../services/confirmChatReplan";
@@ -20,6 +21,7 @@ const VARIANT_CLASSES = {
 };
 
 export function AssistantChat({ variant = "standalone" }: { variant?: "standalone" | "embedded" }) {
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([GREETING]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -79,6 +81,7 @@ export function AssistantChat({ variant = "standalone" }: { variant?: "standalon
     try {
       const result = await confirmChatReplan(proposal.operations);
       setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", text: result.reply }]);
+      if (result.ok) router.refresh();
     } catch (error) {
       console.error("Failed to confirm plan changes:", error);
       setMessages((prev) => [

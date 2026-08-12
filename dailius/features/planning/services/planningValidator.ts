@@ -46,14 +46,23 @@ export function validateSchedule(resultingBlocks: ScheduledBlockDraft[], input: 
   const pristineDays = computeFreeBlocksForWeek(input);
 
   const days = computeFreeBlocksForWeek(input);
+  // A commitment being moved this batch appears in `resultingBlocks` at its
+  // NEW slot (tagged with commitmentId — see applyPlanningOperations.ts).
+  // Without excluding it here, its OLD slot would still get seeded as
+  // permanently busy below, and a same-day move that happens to land back
+  // on an overlapping time would be wrongly rejected as conflicting with
+  // itself.
+  const movedCommitmentIds = new Set(resultingBlocks.map((block) => block.commitmentId).filter((id): id is string => Boolean(id)));
   seedExistingBookings(
     days,
-    input.commitments.map((commitment) => ({
-      scheduledDate: commitment.scheduledDate,
-      startTime: commitment.startTime,
-      endTime: commitment.endTime,
-      isExercise: false,
-    })),
+    input.commitments
+      .filter((commitment) => !movedCommitmentIds.has(commitment.id))
+      .map((commitment) => ({
+        scheduledDate: commitment.scheduledDate,
+        startTime: commitment.startTime,
+        endTime: commitment.endTime,
+        isExercise: false,
+      })),
   );
 
   const latestExerciseConstraint = input.constraints.find((c) => c.type === "latest_exercise_time");

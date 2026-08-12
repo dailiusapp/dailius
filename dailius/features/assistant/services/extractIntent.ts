@@ -14,12 +14,19 @@ export type MissedActivityCandidate = {
 const SYSTEM_PROMPT = `You match a user's message about a missed activity to one of a
 provided list of their real, already-scheduled activities. Only ever return the id of
 one of the provided candidates, or null if nothing clearly matches. Never invent an id
-that isn't in the list.`;
+that isn't in the list.
+
+You are also given "fixedCommitments" — titles of calendar commitments (meetings, fixed
+events) that can never be rescheduled through this feature and are NOT valid candidates.
+If the user's message names something that matches a fixedCommitments title rather than
+a real candidate activity, that is NOT a match — return null, even if a candidate's name
+sounds superficially similar. Do not guess the nearest-sounding candidate.`;
 
 export async function extractIntent(
   userMessage: string,
   todayIso: string,
   candidates: MissedActivityCandidate[],
+  fixedCommitments: string[] = [],
 ): Promise<{ blockId: string | null }> {
   try {
     const response = await client.chat.completions.create({
@@ -28,7 +35,7 @@ export async function extractIntent(
         { role: "system", content: SYSTEM_PROMPT },
         {
           role: "user",
-          content: JSON.stringify({ today: todayIso, message: userMessage, candidates }),
+          content: JSON.stringify({ today: todayIso, message: userMessage, candidates, fixedCommitments }),
         },
       ],
       response_format: {

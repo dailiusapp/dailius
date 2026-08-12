@@ -26,6 +26,7 @@ function describeOperations(operations: PlanningOperation[], currentBlocks: Sche
   const blocksById = new Map(currentBlocks.map((block) => [block.id, block]));
   const activitiesById = new Map(input.activities.map((activity) => [activity.id, activity]));
   const goalsById = new Map(input.goals.map((goal) => [goal.id, goal]));
+  const commitmentsById = new Map(input.commitments.map((commitment) => [commitment.id, commitment]));
   const formatDate = (iso: string) => dayOfWeekLabel(parseISODate(iso));
 
   return operations.map((op) => {
@@ -45,6 +46,10 @@ function describeOperations(operations: PlanningOperation[], currentBlocks: Sche
       case "CHANGE_PRIORITY": {
         const title = goalsById.get(op.goalId)?.title ?? "Goal";
         return `Set '${title}' priority to ${op.newPriority}`;
+      }
+      case "MOVE_COMMITMENT": {
+        const title = commitmentsById.get(op.commitmentId)?.title ?? "Commitment";
+        return `Move ${title} → ${formatDate(op.targetDate)}`;
       }
     }
   });

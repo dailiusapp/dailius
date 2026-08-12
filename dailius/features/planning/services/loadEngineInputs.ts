@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { ActivityInput, AvailabilityInput, CommitmentInput, EngineInput, GoalInput } from "../types";
+import type { ActivityInput, AvailabilityInput, CommitmentInput, CommitmentSource, EngineInput, GoalInput } from "../types";
 import { addDays, getWeekStart, instantToLocalDateTime, todayInTimezone } from "./dateUtils";
 import { getUserTimezone } from "@/features/auth/services/getUserTimezone";
 
@@ -45,7 +45,7 @@ export async function loadEngineInputs(
         .maybeSingle(),
       supabase
         .from("commitments")
-        .select("title, start_time, end_time, timezone")
+        .select("id, title, start_time, end_time, timezone, source")
         .eq("user_id", userId)
         .gte("start_time", weekStart.toISOString())
         .lt("start_time", weekEnd.toISOString()),
@@ -140,13 +140,19 @@ export async function loadEngineInputs(
   // instantToLocalDateTime for why that distinction matters.
   const commitments: CommitmentInput[] = (commitmentsRes.data ?? [])
     .map((row) => ({
+      id: row.id,
       title: row.title,
+      source: row.source as CommitmentSource,
+      timezone: row.timezone,
       start: instantToLocalDateTime(row.start_time, row.timezone),
       end: instantToLocalDateTime(row.end_time, row.timezone),
     }))
     .filter((row) => row.start.date === row.end.date)
     .map((row) => ({
+      id: row.id,
       title: row.title,
+      source: row.source,
+      timezone: row.timezone,
       scheduledDate: row.start.date,
       startTime: row.start.time,
       endTime: row.end.time,

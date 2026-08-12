@@ -13,6 +13,12 @@ export type ScheduledBlock = {
   rationale: string;
 };
 
+// Matches the `source` check constraint on the `commitments` table (see
+// 20260807000000_create_calendar_integration_schema.sql). Only "Manual" and
+// "Google Calendar" are ever actually written today; the other two are
+// reserved schema values.
+export type CommitmentSource = "Manual" | "Google Calendar" | "Apple Calendar" | "Outlook";
+
 // Display shape for a commitment on the weekly plan — read-only from the
 // planner's perspective (imported from Google Calendar, or eventually
 // entered manually), distinct from a ScheduledBlock which the engine placed.
@@ -22,7 +28,7 @@ export type CommitmentBlock = {
   scheduledDate: string; // "YYYY-MM-DD"
   startTime: string; // "HH:MM"
   endTime: string; // "HH:MM"
-  source: string;
+  source: CommitmentSource;
 };
 
 export type WeeklyPlan = {
@@ -81,13 +87,21 @@ export type PreferenceInput = {
 };
 
 // Fixed external events (e.g. imported from Google Calendar) the engine
-// must never schedule over. Same-day only — see syncGoogleCalendarEvents.ts
-// for why multi-day/all-day events are excluded before they ever reach here.
+// must never schedule over — UNLESS source is "Manual" and a MOVE_COMMITMENT
+// op explicitly targets this id, in which case applyPlanningOperations.ts
+// treats it as a placeable occurrence instead. Same-day only — see
+// syncGoogleCalendarEvents.ts for why multi-day/all-day events are excluded
+// before they ever reach here. `timezone` is needed to re-encode a moved
+// commitment's new local date/time back to an instant on write (see
+// confirmReplan.ts) — it's never itself changed by a move.
 export type CommitmentInput = {
+  id: string;
   title: string;
   scheduledDate: string;
   startTime: string;
   endTime: string;
+  source: CommitmentSource;
+  timezone: string;
 };
 
 export type EngineInput = {
@@ -107,6 +121,18 @@ export type ScheduledBlockDraft = {
   startTime: string;
   endTime: string;
   rationale: string;
+  // Set only when this draft results from a MOVE_ACTIVITY op — the date the
+  // activity moved FROM, so a later full regeneration knows which preferred
+  // day is already satisfied by this placement. See engine.ts's `LockedBlock`.
+  originalScheduledDate?: string | null;
+  // Set only when this draft represents a moved commitment (MOVE_COMMITMENT),
+  // not an activity occurrence — activityId/activityName above are still
+  // populated (the commitment's own id/title) purely so this draft can
+  // travel through the same resultingBlocks/validateSchedule machinery
+  // activity blocks already use. confirmReplan.ts uses this marker to route
+  // the write to `commitments` (UPDATE) instead of `scheduled_blocks`
+  // (INSERT).
+  commitmentId?: string;
 };
 
 export type EngineResult = {
@@ -127,12 +153,18 @@ export type PlanningOperation =
   | { type: "MOVE_ACTIVITY"; blockId: string; targetDate: string }
   | { type: "ADD_ACTIVITY"; activityId: string; targetDate: string }
   | { type: "REMOVE_ACTIVITY"; blockId: string }
-  | { type: "CHANGE_PRIORITY"; goalId: string; newPriority: GoalPriority };
+  | { type: "CHANGE_PRIORITY"; goalId: string; newPriority: GoalPriority }
+  // Day-only, same as MOVE_ACTIVITY — only ever valid for a commitment whose
+  // source is "Manual" (enforced in applyPlanningOperations.ts, and the AI
+  // can never even see a non-Manual commitment's id — see
+  // buildPlanningContext.ts).
+  | { type: "MOVE_COMMITMENT"; commitmentId: string; targetDate: string };
 
 export type PlanningTrigger =
   | { type: "MISSED_ACTIVITY"; blockId: string }
   | { type: "FUTURE_MOVE"; blockId: string; targetDayLabel: string | null }
   | { type: "PRIORITY_CHANGE"; goalId: string; newPriority: GoalPriority }
+  | { type: "COMMITMENT_MOVE"; commitmentId: string; targetDayLabel: string | null }
   | { type: "UNKNOWN" };
 
 export type ViolationType =
@@ -176,7 +208,18 @@ export type PlanningContextBlock = {
   status: ScheduledBlockStatus;
 };
 
-export type PlanningContextCommitment = { title: string; scheduledDate: string; startTime: string; endTime: string };
+// `id` is null for any commitment the AI must never reference in an
+// operation (i.e. anything not source === "Manual") — mirrors the "never
+// invent an id" guarantee blockId/activityId/goalId already have, but
+// enforced structurally instead of just by instruction. See
+// buildPlanningContext.ts.
+export type PlanningContextCommitment = {
+  id: string | null;
+  title: string;
+  scheduledDate: string;
+  startTime: string;
+  endTime: string;
+};
 
 export type PlanningContext = {
   today: string; // "YYYY-MM-DD"

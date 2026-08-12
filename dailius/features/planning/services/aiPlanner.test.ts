@@ -53,6 +53,57 @@ describe("callAIPlanner", () => {
     }
   });
 
+  it("parses a well-formed MOVE_COMMITMENT operation", async () => {
+    mockCreate.mockResolvedValue(
+      contentResponse(
+        JSON.stringify({
+          summary: "Move the dentist appointment.",
+          operations: [
+            {
+              type: "MOVE_COMMITMENT",
+              blockId: null,
+              activityId: null,
+              goalId: null,
+              commitmentId: "c1",
+              targetDate: "2026-08-14",
+              newPriority: null,
+            },
+          ],
+        }),
+      ),
+    );
+
+    const result = await callAIPlanner(CONTEXT);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.output.operations).toEqual([{ type: "MOVE_COMMITMENT", commitmentId: "c1", targetDate: "2026-08-14" }]);
+    }
+  });
+
+  it("drops a MOVE_COMMITMENT missing commitmentId and fails when nothing valid remains", async () => {
+    mockCreate.mockResolvedValue(
+      contentResponse(
+        JSON.stringify({
+          summary: "test",
+          operations: [
+            {
+              type: "MOVE_COMMITMENT",
+              blockId: null,
+              activityId: null,
+              goalId: null,
+              commitmentId: null,
+              targetDate: "2026-08-14",
+              newPriority: null,
+            },
+          ],
+        }),
+      ),
+    );
+
+    const result = await callAIPlanner(CONTEXT);
+    expect(result.ok).toBe(false);
+  });
+
   it("drops an operation of an unsupported type and fails when nothing valid remains", async () => {
     mockCreate.mockResolvedValue(
       contentResponse(

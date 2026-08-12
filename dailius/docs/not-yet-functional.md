@@ -17,11 +17,13 @@ integration (`features/assistant/`), now routed through an AI-assisted
 planning pipeline (`features/planning/services/`) per
 `docs/requirements/scheduling refactoring.md`.
 
-**What works:** three intents — "I missed activity X," "move upcoming
-activity X to [day]," and "prioritize/deprioritize goal X" — chained
-classifiers (`classifyIntent.ts`, unifying `extractIntent.ts`,
-`extractFutureRescheduleIntent.ts`, and `extractPriorityChangeIntent.ts`)
-turn a message into a `PlanningTrigger`. From there, the architecture is:
+**What works:** four intents — "I missed activity X," "move upcoming
+activity X to [day]," "move commitment X to [day]" (manually-added, one-time
+commitments only — see below), and "prioritize/deprioritize goal X" —
+chained classifiers (`classifyIntent.ts`, unifying `extractIntent.ts`,
+`extractFutureRescheduleIntent.ts`, `extractCommitmentMoveIntent.ts`, and
+`extractPriorityChangeIntent.ts`) turn a message into a `PlanningTrigger`.
+From there, the architecture is:
 
 ```
 AI Planner (aiPlanner.ts) — proposes structured PlanningOperations
@@ -54,8 +56,24 @@ per-user daily/monthly usage limit (`AI_DAILY_LIMIT`/`AI_MONTHLY_LIMIT` env
 vars, checked before any AI call).
 
 **What's still missing:**
+- **Google Calendar commitments can't be rescheduled — by design, not yet
+  built.** `MOVE_COMMITMENT` only ever applies to a commitment with
+  `source = "Manual"` (a one-time entry from Add Activity); a commitment
+  synced from Google Calendar is never given an id in the AI's context
+  (`buildPlanningContext.ts`), so it can never be referenced or moved. This
+  is because the Google Calendar integration is read-only
+  (`calendar.readonly` OAuth scope — see `features/calendar/services/`) and
+  its sync does a hard delete-and-replace of the week's Google-sourced rows
+  on every run with no merge logic, so even a local-only edit would silently
+  revert on the next sync. Making Google-sourced commitments reschedulable
+  would require requesting write OAuth scope, re-consent from existing
+  users, and new Google Calendar API write calls — a materially bigger
+  feature than the local, Manual-only version built so far.
+- Commitment moves are also day-only (no exact-time picking) and
+  move-only — no add/remove-commitment via chat yet, and no direct
+  (non-chat) edit UI for a commitment's time either.
 - General questions about the plan, "why did you schedule X," and requests
-  that aren't clearly one of the three intents above — still get the
+  that aren't clearly one of the four intents above — still get the
   generic fallback reply, not real handling.
 - Work-conflict ("I have to work late Wednesday") and vacation phrasing —
   same architecture, not yet a recognized intent/classifier.

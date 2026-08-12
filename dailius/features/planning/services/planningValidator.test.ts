@@ -135,12 +135,50 @@ describe("validateSchedule", () => {
 
   it("catches a commitment conflict across the whole week, not just one day", () => {
     const input = buildInput({
-      commitments: [{ title: "Meeting", scheduledDate: TUE_ISO, startTime: "09:00", endTime: "10:00" }],
+      commitments: [
+        {
+          id: "commitment-1",
+          title: "Meeting",
+          scheduledDate: TUE_ISO,
+          startTime: "09:00",
+          endTime: "10:00",
+          source: "Google Calendar",
+          timezone: "UTC",
+        },
+      ],
     });
     const result = validateSchedule([block({ scheduledDate: TUE_ISO, startTime: "09:15", endTime: "09:45" })], input);
     expect(result.valid).toBe(false);
     if (!result.valid) {
       expect(result.violations[0].type).toBe("TIME_CONFLICT");
     }
+  });
+
+  it("does not reject a commitment moving into a slot overlapping its own vacated original time", () => {
+    const input = buildInput({
+      commitments: [
+        {
+          id: "commitment-1",
+          title: "Dentist",
+          scheduledDate: MON_ISO,
+          startTime: "09:00",
+          endTime: "09:30",
+          source: "Manual",
+          timezone: "UTC",
+        },
+      ],
+    });
+    // Same day, same time as the commitment's own (still-present) `input.commitments`
+    // entry — proves the draft isn't rejected as conflicting with itself.
+    const movedDraft = block({
+      activityId: "commitment-1",
+      activityName: "Dentist",
+      scheduledDate: MON_ISO,
+      startTime: "09:00",
+      endTime: "09:30",
+      commitmentId: "commitment-1",
+    });
+    const result = validateSchedule([movedDraft], input);
+    expect(result).toEqual({ valid: true });
   });
 });

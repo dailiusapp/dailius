@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/auth/services/requireUser";
 import { createClient } from "@/lib/supabase/server";
 import type { PlanningOperation } from "../types";
@@ -7,6 +8,7 @@ import { getCurrentPlan } from "./getCurrentPlan";
 import { loadEngineInputs } from "./loadEngineInputs";
 import { applyPlanningOperations } from "./applyPlanningOperations";
 import { validateSchedule } from "./planningValidator";
+import { localDateTimeToInstant } from "./dateUtils";
 
 const GENERIC_ERROR_MESSAGE = "Something went wrong applying those changes. Please try again.";
 const STALE_MESSAGE = "That plan has changed since I proposed this. Please ask again for updated options.";
@@ -60,20 +62,50 @@ export async function confirmReplan(operations: PlanningOperation[]): Promise<Co
     }
   }
 
-  if (applied.newBlocks.length > 0) {
+  // A MOVE_COMMITMENT-derived draft is tagged with commitmentId and belongs
+  // in `commitments` (UPDATE, one stable row), not `scheduled_blocks`
+  // (INSERT) — everything else here is an activity occurrence.
+  const commitmentMoves = applied.newBlocks.filter((block) => block.commitmentId);
+  const activityBlocks = applied.newBlocks.filter((block) => !block.commitmentId);
+
+  if (activityBlocks.length > 0) {
+    // Marked locked so a later full generatePlan.ts regeneration carries
+    // this placement forward instead of silently re-placing it — this is
+    // exactly the kind of user-accepted change §16 says must not be undone.
     const { error: insertError } = await supabase.from("scheduled_blocks").insert(
-      applied.newBlocks.map((block) => ({
+      activityBlocks.map((block) => ({
         weekly_plan_id: plan.id,
         activity_id: block.activityId,
         scheduled_date: block.scheduledDate,
         start_time: block.startTime,
         end_time: block.endTime,
         rationale: block.rationale,
+        locked: true,
+        original_scheduled_date: block.originalScheduledDate ?? null,
       })),
     );
     if (insertError) {
       console.error("Failed to insert new blocks during confirmReplan:", insertError);
       return { ok: false, message: GENERIC_ERROR_MESSAGE };
+    }
+  }
+
+  if (commitmentMoves.length > 0) {
+    const commitmentsById = new Map(loaded.input.commitments.map((commitment) => [commitment.id, commitment]));
+    for (const move of commitmentMoves) {
+      const timezone = commitmentsById.get(move.commitmentId!)!.timezone;
+      const { error: updateError } = await supabase
+        .from("commitments")
+        .update({
+          start_time: localDateTimeToInstant(move.scheduledDate, move.startTime, timezone).toISOString(),
+          end_time: localDateTimeToInstant(move.scheduledDate, move.endTime, timezone).toISOString(),
+        })
+        .eq("id", move.commitmentId)
+        .eq("user_id", user.id);
+      if (updateError) {
+        console.error("Failed to update moved commitment during confirmReplan:", updateError);
+        return { ok: false, message: GENERIC_ERROR_MESSAGE };
+      }
     }
   }
 
@@ -84,6 +116,9 @@ export async function confirmReplan(operations: PlanningOperation[]): Promise<Co
       return { ok: false, message: GENERIC_ERROR_MESSAGE };
     }
   }
+
+  revalidatePath("/weekly-plan");
+  revalidatePath("/dashboard");
 
   return { ok: true, message: "Done — I've updated your schedule." };
 }

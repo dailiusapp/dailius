@@ -1,4 +1,4 @@
-import type { ActivityInput, EngineInput, GoalPriority, PlanningOperation, ScheduledBlock, ScheduledBlockDraft } from "../types";
+import type { ActivityInput, CommitmentInput, EngineInput, GoalPriority, PlanningOperation, ScheduledBlock, ScheduledBlockDraft } from "../types";
 import { EXERCISE_ACTIVITY_NAMES, computeFreeBlocksForWeek, placeOccurrence, prioritizeActivities, seedExistingBookings } from "./engine";
 import { dayOfWeekLabel, parseISODate, timeToMinutes, toISODate } from "./dateUtils";
 
@@ -27,8 +27,10 @@ export function applyPlanningOperations(
   const activitiesById = new Map<string, ActivityInput>(input.activities.map((activity) => [activity.id, activity]));
   const goalIds = new Set(input.goals.map((goal) => goal.id));
   const blocksById = new Map<string, ScheduledBlock>(currentBlocks.map((block) => [block.id, block]));
+  const commitmentsById = new Map<string, CommitmentInput>(input.commitments.map((commitment) => [commitment.id, commitment]));
 
   const touchedBlockIds = new Set<string>(); // MOVE/REMOVE sources — vacate their old slot
+  const touchedCommitmentIds = new Set<string>(); // MOVE_COMMITMENT sources — vacate their old slot
   for (const op of operations) {
     if (op.type === "MOVE_ACTIVITY" || op.type === "REMOVE_ACTIVITY") {
       const block = blocksById.get(op.blockId);
@@ -42,6 +44,17 @@ export function applyPlanningOperations(
     }
     if (op.type === "CHANGE_PRIORITY" && !goalIds.has(op.goalId)) {
       return { ok: false, reason: `Referenced goal does not exist (goalId ${op.goalId}).` };
+    }
+    if (op.type === "MOVE_COMMITMENT") {
+      // Never trust an AI-supplied id blindly (same principle as every other
+      // operation above) — even though buildPlanningContext.ts should never
+      // expose a non-Manual commitment's id to the AI in the first place,
+      // this is the layer that actually enforces it can't be moved.
+      const commitment = commitmentsById.get(op.commitmentId);
+      if (!commitment || commitment.source !== "Manual") {
+        return { ok: false, reason: `Referenced commitment does not exist or is not movable (commitmentId ${op.commitmentId}).` };
+      }
+      touchedCommitmentIds.add(op.commitmentId);
     }
   }
 
@@ -61,12 +74,14 @@ export function applyPlanningOperations(
   );
   seedExistingBookings(
     days,
-    input.commitments.map((commitment) => ({
-      scheduledDate: commitment.scheduledDate,
-      startTime: commitment.startTime,
-      endTime: commitment.endTime,
-      isExercise: false,
-    })),
+    input.commitments
+      .filter((commitment) => !touchedCommitmentIds.has(commitment.id))
+      .map((commitment) => ({
+        scheduledDate: commitment.scheduledDate,
+        startTime: commitment.startTime,
+        endTime: commitment.endTime,
+        isExercise: false,
+      })),
   );
 
   // Same same-day workaround as proposeReschedule.ts/proposeFutureReschedule.ts:
@@ -109,8 +124,48 @@ export function applyPlanningOperations(
       return { ok: false, reason: `No available slot near ${op.targetDate} for ${activity.name}.` };
     }
 
+    if (op.type === "MOVE_ACTIVITY") {
+      placed.originalScheduledDate = blocksById.get(op.blockId)!.scheduledDate;
+      removedBlockIds.push(op.blockId);
+    }
     newBlocks.push(placed);
-    if (op.type === "MOVE_ACTIVITY") removedBlockIds.push(op.blockId);
+  }
+
+  for (const op of operations.filter((o) => o.type === "MOVE_COMMITMENT")) {
+    if (op.type !== "MOVE_COMMITMENT") continue;
+    const commitment = commitmentsById.get(op.commitmentId)!;
+    const durationMinutes = timeToMinutes(commitment.endTime) - timeToMinutes(commitment.startTime);
+    const targetDayLabel = dayOfWeekLabel(parseISODate(op.targetDate));
+
+    // Unlike MOVE_ACTIVITY's activityForSearch, this is deliberately
+    // flexible: false (only the target day is ever considered — no
+    // fallback to another day) and minimumDurationMinutes: null (no
+    // shrink-to-fit). A commitment's day and duration are real-world facts
+    // the user asked for, not preferences the engine may quietly trade off
+    // — if the requested day has no room, this operation batch fails and
+    // the AI decides on its next attempt whether to try a different day,
+    // rather than the engine silently substituting one.
+    const commitmentForSearch: ActivityInput = {
+      id: commitment.id,
+      name: commitment.title,
+      defaultDurationMinutes: durationMinutes,
+      preferredFrequency: null,
+      preferredDays: [targetDayLabel],
+      preferredTimeOfDay: null,
+      minimumDurationMinutes: null,
+      maximumDurationMinutes: null,
+      flexible: false,
+      goalIds: [],
+    };
+    const [resolved] = prioritizeActivities({ ...input, activities: [commitmentForSearch] });
+
+    const placed = placeOccurrence(resolved, 0, days, exerciseCutoffMinutes, maxDailyMinutes);
+    if (!placed) {
+      return { ok: false, reason: `No available slot on ${op.targetDate} for ${commitment.title}.` };
+    }
+
+    placed.commitmentId = op.commitmentId;
+    newBlocks.push(placed);
   }
 
   for (const op of operations) {

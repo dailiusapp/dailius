@@ -55,6 +55,9 @@ export function buildPlanningContext(
     constraints: input.constraints,
     scheduledBlocks,
     commitments: input.commitments.map((commitment) => ({
+      // null for anything not source === "Manual" — the AI can never
+      // reference (and so never move) a commitment it can't see an id for.
+      id: commitment.source === "Manual" ? commitment.id : null,
       title: commitment.title,
       scheduledDate: commitment.scheduledDate,
       startTime: commitment.startTime,

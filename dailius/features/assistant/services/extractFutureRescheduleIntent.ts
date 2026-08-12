@@ -19,12 +19,19 @@ real, already-scheduled activities. Only ever return the id of one of the provid
 candidates, or null if nothing clearly matches. Never invent an id that isn't in the
 list. If the user's message also names a day of the week they want the activity moved
 to (e.g. "move it to Saturday"), return that day as a three-letter label (Mon, Tue,
-Wed, Thu, Fri, Sat, Sun); otherwise return null for targetDayLabel.`;
+Wed, Thu, Fri, Sat, Sun); otherwise return null for targetDayLabel.
+
+You are also given "fixedCommitments" — titles of calendar commitments (meetings, fixed
+events) that can never be rescheduled through this feature and are NOT valid candidates.
+If the user's message names something that matches a fixedCommitments title rather than
+a real candidate activity, that is NOT a match — return null, even if a candidate's name
+sounds superficially similar. Do not guess the nearest-sounding candidate.`;
 
 export async function extractFutureRescheduleIntent(
   userMessage: string,
   todayIso: string,
   candidates: UpcomingActivityCandidate[],
+  fixedCommitments: string[] = [],
 ): Promise<{ blockId: string | null; targetDayLabel: string | null }> {
   try {
     const response = await client.chat.completions.create({
@@ -33,7 +40,7 @@ export async function extractFutureRescheduleIntent(
         { role: "system", content: SYSTEM_PROMPT },
         {
           role: "user",
-          content: JSON.stringify({ today: todayIso, message: userMessage, candidates }),
+          content: JSON.stringify({ today: todayIso, message: userMessage, candidates, fixedCommitments }),
         },
       ],
       response_format: {

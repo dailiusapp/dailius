@@ -51,7 +51,7 @@ export type PlanningEventResult = "VALID" | "INVALID" | "MALFORMED" | "ERROR" | 
 // Matches ai_planning_events' trigger CHECK constraint exactly — narrower
 // than PlanningTrigger["type"], which also has "UNKNOWN" (never logged,
 // since sendChatMessage.ts returns before calling proposeReplan for it).
-export type LoggedTrigger = "MISSED_ACTIVITY" | "FUTURE_MOVE" | "PRIORITY_CHANGE";
+export type LoggedTrigger = "MISSED_ACTIVITY" | "FUTURE_MOVE" | "PRIORITY_CHANGE" | "COMMITMENT_MOVE";
 
 export async function logPlanningEvent(event: {
   userId: string;

@@ -46,14 +46,41 @@ export async function sendChatMessage(userMessage: string): Promise<SendChatMess
   const goals = await getGoalsForUser(user.id, { status: "active" });
   const goalCandidates = goals.map((goal) => ({ id: goal.id, title: goal.title, priority: goal.priority }));
 
-  if (pastCandidates.length === 0 && futureCandidates.length === 0 && goalCandidates.length === 0) {
+  // Manually-added commitments (one-time entries from Add Activity) are real
+  // candidates the chat can move, same as an activity. Everything else
+  // (Google-synced, etc.) renders on the same calendar but is never
+  // reschedulable through this feature — passed to the classifiers as a
+  // "don't match" list instead, so a message naming one of these can't get
+  // fuzzy-matched onto an unrelated real activity/commitment purely by name
+  // similarity, silently rescheduling the wrong thing.
+  const manualCommitmentCandidates = plan.commitments
+    .filter((commitment) => commitment.source === "Manual")
+    .map((commitment) => ({ id: commitment.id, title: commitment.title, scheduledDate: commitment.scheduledDate }));
+  const fixedCommitmentTitles = [
+    ...new Set(plan.commitments.filter((commitment) => commitment.source !== "Manual").map((commitment) => commitment.title)),
+  ];
+
+  if (
+    pastCandidates.length === 0 &&
+    futureCandidates.length === 0 &&
+    goalCandidates.length === 0 &&
+    manualCommitmentCandidates.length === 0
+  ) {
     return {
       reply: "You don't have any activities scheduled or goals set up this week yet.",
       proposal: null,
     };
   }
 
-  const trigger = await classifyIntent(userMessage, todayIso, pastCandidates, futureCandidates, goalCandidates);
+  const trigger = await classifyIntent(
+    userMessage,
+    todayIso,
+    pastCandidates,
+    futureCandidates,
+    goalCandidates,
+    fixedCommitmentTitles,
+    manualCommitmentCandidates,
+  );
 
   if (trigger.type === "UNKNOWN") {
     return { reply: COULD_NOT_UNDERSTAND_REPLY, proposal: null };

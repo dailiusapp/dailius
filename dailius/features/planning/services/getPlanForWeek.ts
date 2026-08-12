@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { ScheduledBlockStatus, WeeklyPlan, WeeklyPlanStatus } from "../types";
+import type { CommitmentSource, ScheduledBlockStatus, WeeklyPlan, WeeklyPlanStatus } from "../types";
 import { addDays, instantToLocalDateTime, localDateTimeToInstant, parseISODate, toISODate } from "./dateUtils";
 
 export async function getPlanForWeek(
@@ -81,7 +81,7 @@ export async function getPlanForWeek(
         scheduledDate: start.date,
         startTime: start.time,
         endTime: end.time,
-        source: row.source,
+        source: row.source as CommitmentSource,
       };
     }),
   };

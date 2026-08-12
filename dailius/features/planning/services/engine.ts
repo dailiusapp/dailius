@@ -7,7 +7,16 @@ import type {
   GoalPriority,
   ScheduledBlockDraft,
 } from "../types";
-import { addDays, dayOfWeekLabel, getWeekStart, isWeekend, minutesToTime, timeToMinutes, toISODate } from "./dateUtils";
+import {
+  addDays,
+  dayOfWeekLabel,
+  getWeekStart,
+  isWeekend,
+  minutesToTime,
+  parseISODate,
+  timeToMinutes,
+  toISODate,
+} from "./dateUtils";
 import { buildRationale, type PlacementReason } from "./rationale";
 
 // Built from GoalsStep.tsx's GOAL_OPTIONS and RecurringActivitiesStep.tsx's
@@ -171,6 +180,12 @@ type ResolvedActivity = {
   weeklyCount: number;
   durationMinutes: number;
   isExercise: boolean;
+  // Day labels this activity must not be placed on this run — used by
+  // generateWeeklySchedule to keep a vacated day (one a locked/moved block
+  // used to occupy) from being silently refilled by a fresh occurrence,
+  // regardless of whether the activity uses preferredDays or frequency-only
+  // "balance" placement (see candidateDaysForOccurrence).
+  excludedDays?: Set<string>;
 };
 
 export function prioritizeActivities(input: EngineInput): ResolvedActivity[] {
@@ -238,22 +253,23 @@ function candidateDaysForOccurrence(
   occurrenceIndex: number,
   days: DayPlan[],
 ): DayPlan[] {
-  const { activity, isExercise } = resolved;
+  const { activity, isExercise, excludedDays } = resolved;
+  const availableDays = excludedDays && excludedDays.size > 0 ? days.filter((day) => !excludedDays.has(day.dayLabel)) : days;
 
   if (activity.preferredDays.length > 0) {
     const targetLabel = activity.preferredDays[occurrenceIndex % activity.preferredDays.length];
-    const targetDay = days.find((day) => day.dayLabel === targetLabel);
+    const targetDay = availableDays.find((day) => day.dayLabel === targetLabel);
     const preferredFirst = targetDay ? [targetDay] : [];
 
     if (!activity.flexible) {
       return preferredFirst;
     }
 
-    const rest = rankDaysByBalance(days, isExercise).filter((day) => day.dayLabel !== targetLabel);
+    const rest = rankDaysByBalance(availableDays, isExercise).filter((day) => day.dayLabel !== targetLabel);
     return [...preferredFirst, ...rest];
   }
 
-  return rankDaysByBalance(days, isExercise);
+  return rankDaysByBalance(availableDays, isExercise);
 }
 
 function rangeMidpoint(range: MinuteRange): number {
@@ -470,7 +486,21 @@ export function placeActivities(
   return { blocks, unplacedCount };
 }
 
-export function generateWeeklySchedule(input: EngineInput): EngineResult {
+// A block confirmReplan.ts already placed on the user's behalf (e.g. a
+// chat-driven move) that a full regeneration must carry forward untouched
+// rather than re-placing from scratch — see generatePlan.ts.
+// `originalScheduledDate`, set only for MOVE_ACTIVITY-derived blocks, is the
+// date the activity moved FROM — needed to know which preferred day is
+// already satisfied by this placement (see below).
+export type LockedBlock = {
+  activityId: string;
+  scheduledDate: string;
+  startTime: string;
+  endTime: string;
+  originalScheduledDate?: string | null;
+};
+
+export function generateWeeklySchedule(input: EngineInput, lockedBlocks: LockedBlock[] = []): EngineResult {
   const days = computeFreeBlocksForWeek(input);
   seedExistingBookings(
     days,
@@ -481,7 +511,39 @@ export function generateWeeklySchedule(input: EngineInput): EngineResult {
       isExercise: false,
     })),
   );
-  const resolvedActivities = prioritizeActivities(input);
+  const activitiesById = new Map(input.activities.map((activity) => [activity.id, activity]));
+  seedExistingBookings(
+    days,
+    lockedBlocks.map((block) => ({
+      scheduledDate: block.scheduledDate,
+      startTime: block.startTime,
+      endTime: block.endTime,
+      isExercise: EXERCISE_ACTIVITY_NAMES.has((activitiesById.get(block.activityId)?.name ?? "").trim().toLowerCase()),
+    })),
+  );
+
+  const lockedCountByActivity = new Map<string, number>();
+  const vacatedDaysByActivity = new Map<string, Set<string>>();
+  for (const block of lockedBlocks) {
+    lockedCountByActivity.set(block.activityId, (lockedCountByActivity.get(block.activityId) ?? 0) + 1);
+    if (block.originalScheduledDate) {
+      const vacatedDays = vacatedDaysByActivity.get(block.activityId) ?? new Set<string>();
+      vacatedDays.add(dayOfWeekLabel(parseISODate(block.originalScheduledDate)));
+      vacatedDaysByActivity.set(block.activityId, vacatedDays);
+    }
+  }
+
+  // Reducing weeklyCount alone isn't enough: candidateDaysForOccurrence
+  // would otherwise still be free to re-place a fresh occurrence right back
+  // onto the vacated day — whether by preferredDays cycling starting at
+  // index 0 again, or (frequency-only activities with no preferredDays) by
+  // rankDaysByBalance actively preferring that day once it reads as freed
+  // up. excludedDays closes both paths at once.
+  const resolvedActivities = prioritizeActivities(input).map((resolved) => ({
+    ...resolved,
+    excludedDays: vacatedDaysByActivity.get(resolved.activity.id),
+    weeklyCount: Math.max(0, resolved.weeklyCount - (lockedCountByActivity.get(resolved.activity.id) ?? 0)),
+  }));
   const { blocks, unplacedCount } = placeActivities(input, days, resolvedActivities);
 
   return {
