@@ -3,6 +3,7 @@ import { requireUser } from "@/features/auth/services/requireUser";
 import { getProfile } from "@/features/auth/services/getProfile";
 import { TimezoneSync } from "@/features/auth/components/TimezoneSync";
 import { TopNav } from "@/components/app/TopNav";
+import { EditRecordModalProvider } from "@/features/planning/components/EditRecordModal/EditRecordModalProvider";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
@@ -13,7 +14,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <TimezoneSync currentTimezone={profile?.timezone ?? null} />
       <TopNav email={user.email ?? ""} fullName={profile?.fullName} />
       <main id="main" className="flex-1">
-        {children}
+        <EditRecordModalProvider>{children}</EditRecordModalProvider>
       </main>
     </div>
   );
