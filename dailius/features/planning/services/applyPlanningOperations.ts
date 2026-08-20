@@ -156,6 +156,8 @@ export function applyPlanningOperations(
       maximumDurationMinutes: null,
       flexible: false,
       goalIds: [],
+      fixedStartTime: null,
+      oneTimeDate: null,
     };
     const [resolved] = prioritizeActivities({ ...input, activities: [commitmentForSearch] });
 

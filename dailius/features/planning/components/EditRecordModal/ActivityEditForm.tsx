@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { updateActivity } from "@/features/activities/services/updateActivity";
 import { deleteActivity } from "@/features/activities/services/deleteActivity";
+import { FixedTimeFields } from "@/features/activities/components/FixedTimeFields";
+import { toISODate } from "@/features/planning/services/dateUtils";
 import type { ActivityFieldErrors, ActivityForEdit, ActivityFrequencyMode } from "@/features/activities/types";
 import type { Goal } from "@/features/goals/types";
 
@@ -12,6 +14,10 @@ const DURATION_OPTIONS = [15, 30, 45, 60, 90];
 const DAY_OPTIONS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const TIME_OPTIONS = ["Morning", "Afternoon", "Evening"];
 const FREQUENCY_OPTIONS = ["Daily", "3 times per week", "2 times per week", "Once per week", "Twice per month"];
+
+function todayISODate(): string {
+  return toISODate(new Date());
+}
 
 function chipClasses(active: boolean) {
   return cn(
@@ -43,6 +49,11 @@ export function ActivityEditForm({
   const [preferredTimeOfDay, setPreferredTimeOfDay] = useState<string | null>(activity.preferredTimeOfDay);
   const [flexible, setFlexible] = useState(activity.flexible);
   const [goalIds, setGoalIds] = useState<string[]>(activity.goalIds);
+  const [oneTimeDate, setOneTimeDate] = useState<string | null>(activity.oneTimeDate);
+  const [fixedStartTime, setFixedStartTime] = useState<string | null>(activity.fixedStartTime);
+  // Kept uncontrolled for the same Safari reason AddActivityForm's date
+  // input is — see that file's dateInputRef comment.
+  const dateInputRef = useRef<HTMLInputElement>(null);
 
   const [fieldError, setFieldError] = useState<Partial<Record<ActivityFieldErrors, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -62,9 +73,10 @@ export function ActivityEditForm({
     setFrequencyMode(mode);
     setPreferredDays([]);
     setPreferredFrequency(null);
+    setOneTimeDate(null);
   }
 
-  function validate(): Partial<Record<ActivityFieldErrors, string>> {
+  function validate(dateValue: string | null): Partial<Record<ActivityFieldErrors, string>> {
     const errors: Partial<Record<ActivityFieldErrors, string>> = {};
     if (!name.trim()) {
       errors.name = "Give this activity a name.";
@@ -75,6 +87,13 @@ export function ActivityEditForm({
     if (frequencyMode === "timesPerWeek" && !preferredFrequency) {
       errors.preferredFrequency = "Pick how often this happens.";
     }
+    if (frequencyMode === "oneTime") {
+      if (!dateValue) {
+        errors.oneTimeDate = "Pick a date.";
+      } else if (dateValue < todayISODate()) {
+        errors.oneTimeDate = "Pick a date in the future.";
+      }
+    }
     return errors;
   }
 
@@ -82,7 +101,9 @@ export function ActivityEditForm({
     event.preventDefault();
     if (isSaving) return;
 
-    const errors = validate();
+    const dateValue = frequencyMode === "oneTime" ? dateInputRef.current?.value || null : null;
+
+    const errors = validate(dateValue);
     setFieldError(errors);
     if (Object.keys(errors).length > 0) return;
 
@@ -98,6 +119,8 @@ export function ActivityEditForm({
       preferredTimeOfDay,
       flexible,
       goalIds,
+      oneTimeDate: dateValue,
+      fixedStartTime,
     });
     setIsSaving(false);
 
@@ -183,8 +206,8 @@ export function ActivityEditForm({
 
       <div>
         <span className="text-sm font-medium text-navy">How often</span>
-        <div className="mt-1.5 grid grid-cols-2 gap-2">
-          {(["days", "timesPerWeek"] as const).map((mode) => (
+        <div className="mt-1.5 grid grid-cols-3 gap-2">
+          {(["days", "timesPerWeek", "oneTime"] as const).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -198,12 +221,39 @@ export function ActivityEditForm({
                   : "border-gray-200 bg-white text-gray-700 hover:border-brand-to/40",
               )}
             >
-              {mode === "days" ? "Specific days" : "Times per week"}
+              {mode === "days" ? "Specific days" : mode === "timesPerWeek" ? "Times per week" : "One time"}
             </button>
           ))}
         </div>
 
-        {frequencyMode === "days" ? (
+        {frequencyMode === "oneTime" ? (
+          <div className="mt-3">
+            <label className="block text-sm" htmlFor="activity-edit-date">
+              <span className="font-medium text-navy">Date</span>
+              <input
+                id="activity-edit-date"
+                type="date"
+                min={todayISODate()}
+                ref={dateInputRef}
+                defaultValue={oneTimeDate ?? ""}
+                disabled={isSaving}
+                onChange={(event) => setOneTimeDate(event.target.value || null)}
+                aria-invalid={fieldError.oneTimeDate ? true : undefined}
+                className={cn(
+                  "mt-1.5 block w-full rounded-xl border px-4 py-3 text-[15px] focus:outline-none focus:ring-2",
+                  fieldError.oneTimeDate
+                    ? "border-red-400 focus:ring-red-400"
+                    : "border-gray-300 focus:border-brand-to focus:ring-brand-to",
+                )}
+              />
+              {fieldError.oneTimeDate ? (
+                <p role="alert" className="mt-1.5 text-sm text-red-600">
+                  {fieldError.oneTimeDate}
+                </p>
+              ) : null}
+            </label>
+          </div>
+        ) : frequencyMode === "days" ? (
           <div className="mt-3">
             <div className="flex flex-wrap gap-1.5">
               {DAY_OPTIONS.map((day) => {
@@ -256,6 +306,15 @@ export function ActivityEditForm({
           </div>
         )}
       </div>
+
+      <FixedTimeFields
+        idPrefix="activity-edit"
+        fixedStartTime={fixedStartTime}
+        onChange={setFixedStartTime}
+        durationMinutes={durationMinutes}
+        disabled={isSaving}
+        error={fieldError.fixedStartTime}
+      />
 
       <label className="block text-sm">
         <span className="font-medium text-navy">Preferred time</span>

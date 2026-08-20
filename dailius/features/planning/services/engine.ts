@@ -205,8 +205,9 @@ export function prioritizeActivities(input: EngineInput): ResolvedActivity[] {
     const priority: GoalPriority = topGoal?.priority ?? "medium";
     const isExercise = EXERCISE_ACTIVITY_NAMES.has(activity.name.trim().toLowerCase());
 
-    const weeklyCount =
-      activity.preferredDays.length > 0
+    const weeklyCount = activity.oneTimeDate
+      ? 1
+      : activity.preferredDays.length > 0
         ? activity.preferredDays.length
         : FREQUENCY_TO_WEEKLY_COUNT[activity.preferredFrequency ?? ""] ?? 1;
 
@@ -227,6 +228,15 @@ export function prioritizeActivities(input: EngineInput): ResolvedActivity[] {
   });
 
   resolved.sort((a, b) => {
+    // Fixed-time activities are placed first, ahead of even priority
+    // ordering — a hard exact-time constraint must never lose its slot to
+    // a merely higher-priority flexible activity that happened to be
+    // searched first (placeActivities mutates `days` as it goes, so
+    // placement order decides who wins a contested slot).
+    const aFixed = Boolean(a.activity.fixedStartTime);
+    const bFixed = Boolean(b.activity.fixedStartTime);
+    if (aFixed !== bFixed) return aFixed ? -1 : 1;
+
     if (PRIORITY_RANK[b.priority] !== PRIORITY_RANK[a.priority]) {
       return PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority];
     }
@@ -255,6 +265,11 @@ function candidateDaysForOccurrence(
 ): DayPlan[] {
   const { activity, isExercise, excludedDays } = resolved;
   const availableDays = excludedDays && excludedDays.size > 0 ? days.filter((day) => !excludedDays.has(day.dayLabel)) : days;
+
+  if (activity.oneTimeDate) {
+    const day = availableDays.find((d) => d.date === activity.oneTimeDate);
+    return day ? [day] : [];
+  }
 
   if (activity.preferredDays.length > 0) {
     const targetLabel = activity.preferredDays[occurrenceIndex % activity.preferredDays.length];
@@ -320,6 +335,22 @@ function findSlotInDay(
   return null;
 }
 
+// Sibling to findSlotInDay for fixed-time activities: no preference
+// ordering, no exercise-cutoff interaction, no search — either the exact
+// requested clock time fits, or it doesn't. Deliberately ignores
+// exerciseCutoffMinutes: an explicit time the user set is authoritative,
+// unlike the soft cutoff preference that only governs freely-placed
+// exercise activities.
+function findExactSlotInDay(day: DayPlan, startTime: string, durationMinutes: number, maxDailyMinutes: number | null): MinuteRange | null {
+  if (day.isPast) return null;
+  if (maxDailyMinutes !== null && day.plannedMinutes + durationMinutes > maxDailyMinutes) return null;
+
+  const start = timeToMinutes(startTime);
+  const slot = { start, end: start + durationMinutes };
+  const fits = day.freeRanges.some((range) => range.start <= slot.start && slot.end <= range.end);
+  return fits ? slot : null;
+}
+
 function findNearbyProtectedLabel(day: DayPlan, slot: MinuteRange): string | null {
   const PROXIMITY_MINUTES = 60;
   const nearby = day.activeProtectedRanges.find(
@@ -337,6 +368,41 @@ export function placeOccurrence(
 ): ScheduledBlockDraft | null {
   const { activity, durationMinutes, isExercise, linkedGoalTitle } = resolved;
   const candidates = candidateDaysForOccurrence(resolved, occurrenceIndex, days);
+
+  if (activity.fixedStartTime) {
+    for (const day of candidates) {
+      const slot = findExactSlotInDay(day, activity.fixedStartTime, durationMinutes, maxDailyMinutes);
+      if (!slot) continue;
+
+      day.freeRanges = subtractRange(day.freeRanges, slot);
+      day.plannedMinutes += durationMinutes;
+      if (isExercise) day.hasExerciseBlock = true;
+
+      const rationale = buildRationale({
+        activityName: activity.name,
+        dayLabel: day.dayLabel,
+        placementReason: "fixed-time",
+        linkedGoalTitle,
+        cutoffTime: null,
+        protectedLabel: findNearbyProtectedLabel(day, slot),
+        shortenedToMinutes: null,
+        preferredTimeOfDay: null,
+        startTime: activity.fixedStartTime,
+      });
+
+      return {
+        activityId: activity.id,
+        activityName: activity.name,
+        scheduledDate: day.date,
+        startTime: minutesToTime(slot.start),
+        endTime: minutesToTime(slot.end),
+        rationale,
+      };
+    }
+    // No fallback to a different time or a shrunk duration — a fixed time
+    // is a promise to the user, not a preference to trade off.
+    return null;
+  }
 
   const durationsToTry = [durationMinutes];
   if (activity.minimumDurationMinutes && activity.minimumDurationMinutes < durationMinutes) {
@@ -373,6 +439,7 @@ export function placeOccurrence(
         protectedLabel: findNearbyProtectedLabel(day, slot),
         shortenedToMinutes: wantedDuration < durationMinutes ? wantedDuration : null,
         preferredTimeOfDay: !matchedPreferredTime ? activity.preferredTimeOfDay : null,
+        startTime: null,
       });
 
       return {
@@ -443,6 +510,7 @@ export function placeOccurrenceCandidates(
         protectedLabel: findNearbyProtectedLabel(day, slot),
         shortenedToMinutes: wantedDuration < durationMinutes ? wantedDuration : null,
         preferredTimeOfDay: !matchedPreferredTime ? activity.preferredTimeOfDay : null,
+        startTime: null,
       });
 
       results.push({
@@ -464,9 +532,10 @@ export function placeActivities(
   input: EngineInput,
   days: DayPlan[],
   resolvedActivities: ResolvedActivity[],
-): { blocks: ScheduledBlockDraft[]; unplacedCount: number } {
+): { blocks: ScheduledBlockDraft[]; unplacedCount: number; unplacedFixedTimeActivities: { activityId: string; activityName: string }[] } {
   const blocks: ScheduledBlockDraft[] = [];
   let unplacedCount = 0;
+  const unplacedFixedTimeActivities: { activityId: string; activityName: string }[] = [];
 
   const latestExerciseConstraint = input.constraints.find((c) => c.type === "latest_exercise_time");
   const exerciseCutoffMinutes = latestExerciseConstraint ? timeToMinutes(latestExerciseConstraint.value) : null;
@@ -479,11 +548,14 @@ export function placeActivities(
         blocks.push(placed);
       } else {
         unplacedCount++;
+        if (resolved.activity.fixedStartTime) {
+          unplacedFixedTimeActivities.push({ activityId: resolved.activity.id, activityName: resolved.activity.name });
+        }
       }
     }
   }
 
-  return { blocks, unplacedCount };
+  return { blocks, unplacedCount, unplacedFixedTimeActivities };
 }
 
 // A block confirmReplan.ts already placed on the user's behalf (e.g. a
@@ -539,16 +611,27 @@ export function generateWeeklySchedule(input: EngineInput, lockedBlocks: LockedB
   // index 0 again, or (frequency-only activities with no preferredDays) by
   // rankDaysByBalance actively preferring that day once it reads as freed
   // up. excludedDays closes both paths at once.
+  const dayDates = new Set(days.map((day) => day.date));
   const resolvedActivities = prioritizeActivities(input).map((resolved) => ({
     ...resolved,
     excludedDays: vacatedDaysByActivity.get(resolved.activity.id),
-    weeklyCount: Math.max(0, resolved.weeklyCount - (lockedCountByActivity.get(resolved.activity.id) ?? 0)),
+    // A oneTimeDate outside this week's window isn't a placement failure —
+    // it's simply not applicable this week (it either already happened or
+    // hasn't arrived yet), so it must not count toward unplacedCount at
+    // all. Forcing weeklyCount to 0 here (rather than letting
+    // placeOccurrence run against zero candidate days and return null)
+    // keeps that distinction visible to placeActivities.
+    weeklyCount:
+      resolved.activity.oneTimeDate && !dayDates.has(resolved.activity.oneTimeDate)
+        ? 0
+        : Math.max(0, resolved.weeklyCount - (lockedCountByActivity.get(resolved.activity.id) ?? 0)),
   }));
-  const { blocks, unplacedCount } = placeActivities(input, days, resolvedActivities);
+  const { blocks, unplacedCount, unplacedFixedTimeActivities } = placeActivities(input, days, resolvedActivities);
 
   return {
     weekStart: toISODate(getWeekStart(input.today)),
     blocks,
     unplacedCount,
+    unplacedFixedTimeActivities,
   };
 }

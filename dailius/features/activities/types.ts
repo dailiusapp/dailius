@@ -11,20 +11,28 @@ export type CreateActivityInput = {
   preferredTimeOfDay: string | null;
   flexible: boolean;
   goalIds: string[];
-  scheduledDate: string | null; // "YYYY-MM-DD", used when frequencyMode === "oneTime"
-  scheduledTime: string | null; // "HH:MM", used when frequencyMode === "oneTime"
+  oneTimeDate: string | null; // "YYYY-MM-DD", required iff frequencyMode === "oneTime"
+  // "HH:MM" — optional exact time, available for ANY frequencyMode. A hard
+  // constraint: the engine places this activity at exactly this time or
+  // not at all. When null, placement falls back to preferredTimeOfDay as
+  // before.
+  fixedStartTime: string | null;
 };
 
-export type ActivityFieldErrors = "name" | "preferredDays" | "preferredFrequency" | "scheduledDate" | "scheduledTime";
+export type ActivityFieldErrors =
+  | "name"
+  | "preferredDays"
+  | "preferredFrequency"
+  | "oneTimeDate"
+  | "fixedStartTime";
 
 export type CreateActivityResult =
   | { ok: true; activityId: string }
   | { ok: false; message: string; field?: ActivityFieldErrors };
 
-// No "oneTime" here — a one-off entry is structurally a Manual commitment,
-// not an `activities` row (see createActivity.ts's oneTime branch). Editing
-// an existing activity only ever deals with its two recurring shapes.
-export type ActivityFrequencyMode = Exclude<FrequencyMode, "oneTime">;
+// "oneTime" is now a real activities row (see createActivity.ts) — no
+// exclusion needed.
+export type ActivityFrequencyMode = FrequencyMode;
 
 export type ActivityForEdit = {
   id: string;
@@ -36,6 +44,8 @@ export type ActivityForEdit = {
   preferredTimeOfDay: string | null;
   flexible: boolean;
   goalIds: string[];
+  oneTimeDate: string | null;
+  fixedStartTime: string | null;
 };
 
 export type GetActivityForEditResult =
@@ -56,6 +66,8 @@ export type UpdateActivityInput = {
   preferredTimeOfDay: string | null;
   flexible: boolean;
   goalIds: string[];
+  oneTimeDate: string | null;
+  fixedStartTime: string | null;
 };
 
 export type UpdateActivityResult =

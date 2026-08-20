@@ -86,6 +86,10 @@ export async function generatePlan(): Promise<GeneratePlanResult> {
     console.error(`generatePlan: ${result.unplacedCount} occurrence(s) could not be placed for user ${user.id}`);
   }
 
+  const unplacedFixedTimeWarnings = result.unplacedFixedTimeActivities.map(
+    (activity) => `"${activity.activityName}" couldn't be scheduled this week — its exact time is no longer free.`,
+  );
+
   const { error: archiveError } = await supabase
     .from("weekly_plans")
     .update({ status: "archived" })
@@ -100,7 +104,12 @@ export async function generatePlan(): Promise<GeneratePlanResult> {
 
   const { data: planRow, error: planError } = await supabase
     .from("weekly_plans")
-    .insert({ user_id: user.id, week_start: result.weekStart, status: "active" })
+    .insert({
+      user_id: user.id,
+      week_start: result.weekStart,
+      status: "active",
+      unplaced_fixed_time_warnings: unplacedFixedTimeWarnings.length > 0 ? unplacedFixedTimeWarnings : null,
+    })
     .select("id")
     .single();
 

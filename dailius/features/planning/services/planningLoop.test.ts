@@ -23,7 +23,14 @@ import { runPlanningLoop } from "./planningLoop";
 import { MAX_PLANNING_ATTEMPTS } from "../constants";
 import type { EngineInput, PlanningTrigger, WeeklyPlan } from "../types";
 
-const PLAN: WeeklyPlan = { id: "plan-1", weekStart: "2026-08-10", status: "active", blocks: [], commitments: [] };
+const PLAN: WeeklyPlan = {
+  id: "plan-1",
+  weekStart: "2026-08-10",
+  status: "active",
+  blocks: [],
+  commitments: [],
+  unplacedFixedTimeWarnings: [],
+};
 
 const INPUT: EngineInput = {
   today: new Date(2026, 7, 10),

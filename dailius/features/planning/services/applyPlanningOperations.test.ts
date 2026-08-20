@@ -19,9 +19,13 @@ const RUNNING: ActivityInput = {
   maximumDurationMinutes: null,
   flexible: true,
   goalIds: [],
+  fixedStartTime: null,
+  oneTimeDate: null,
 };
 
 const YOGA: ActivityInput = { ...RUNNING, id: "activity-2", name: "Yoga" };
+
+const FIXED_MEETING: ActivityInput = { ...RUNNING, id: "activity-3", name: "Fixed Meeting", fixedStartTime: "10:00" };
 
 const GOAL: GoalInput = { id: "goal-1", title: "Run a 10k", priority: "medium" };
 
@@ -41,7 +45,7 @@ function buildInput(overrides: Partial<EngineInput> = {}): EngineInput {
   return {
     today: MONDAY,
     goals: [GOAL],
-    activities: [RUNNING, YOGA],
+    activities: [RUNNING, YOGA, FIXED_MEETING],
     constraints: [],
     preferences: [],
     availability: {
@@ -159,6 +163,20 @@ describe("applyPlanningOperations", () => {
       buildInput(),
     );
     expect(result.ok).toBe(false);
+  });
+
+  it("keeps a fixed-time activity's exact time when moved to a new day", () => {
+    const result = applyPlanningOperations(
+      [{ type: "MOVE_ACTIVITY", blockId: "block-3", targetDate: WED_ISO }],
+      [scheduledBlock({ id: "block-3", activityId: "activity-3", activityName: "Fixed Meeting", startTime: "10:00", endTime: "10:30" })],
+      buildInput(),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.newBlocks).toHaveLength(1);
+      expect(result.newBlocks[0].scheduledDate).toBe(WED_ISO);
+      expect(result.newBlocks[0].startTime).toBe("10:00");
+    }
   });
 
   it("moves a manual commitment to its target day", () => {

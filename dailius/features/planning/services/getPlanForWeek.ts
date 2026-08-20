@@ -11,7 +11,7 @@ export async function getPlanForWeek(
 
   const { data: planRow, error: planError } = await supabase
     .from("weekly_plans")
-    .select("id, week_start, status")
+    .select("id, week_start, status, unplaced_fixed_time_warnings")
     .eq("user_id", userId)
     .eq("week_start", weekStart)
     .eq("status", "active")
@@ -84,5 +84,6 @@ export async function getPlanForWeek(
         source: row.source as CommitmentSource,
       };
     }),
+    unplacedFixedTimeWarnings: (planRow.unplaced_fixed_time_warnings as string[] | null) ?? [],
   };
 }

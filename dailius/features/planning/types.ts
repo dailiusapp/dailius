@@ -37,6 +37,10 @@ export type WeeklyPlan = {
   status: WeeklyPlanStatus;
   blocks: ScheduledBlock[];
   commitments: CommitmentBlock[];
+  // Human-readable messages for fixed-time activities whose exact slot
+  // couldn't be placed on this regeneration (see engine.ts's
+  // unplacedFixedTimeActivities). Empty in the normal case.
+  unplacedFixedTimeWarnings: string[];
 };
 
 export type GeneratePlanResult =
@@ -74,6 +78,14 @@ export type ActivityInput = {
   maximumDurationMinutes: number | null;
   flexible: boolean;
   goalIds: string[];
+  // "HH:MM" — a hard constraint: when set, the engine places this
+  // occurrence at exactly this clock time or not at all, never searching
+  // for a nearby slot. See engine.ts's findExactSlotInDay.
+  fixedStartTime: string | null;
+  // "YYYY-MM-DD" — this activity's only valid placement day. When set, the
+  // engine treats it as a single occurrence restricted to that date rather
+  // than a recurring weekly pattern.
+  oneTimeDate: string | null;
 };
 
 export type ConstraintInput = {
@@ -139,6 +151,12 @@ export type EngineResult = {
   weekStart: string;
   blocks: ScheduledBlockDraft[];
   unplacedCount: number;
+  // Fixed-time activities whose exact slot couldn't be placed this run —
+  // a subset of the occurrences counted in unplacedCount, surfaced
+  // separately so the UI can warn about them specifically (a fixed time is
+  // a promise to the user in a way a merely-unplaced flexible occurrence
+  // isn't).
+  unplacedFixedTimeActivities: { activityId: string; activityName: string }[];
 };
 
 // --- AI-assisted planning: operations, triggers, validation (docs/requirements/scheduling refactoring.md) ---

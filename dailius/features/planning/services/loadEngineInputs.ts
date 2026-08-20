@@ -30,7 +30,7 @@ export async function loadEngineInputs(
       supabase
         .from("activities")
         .select(
-          "id, name, default_duration_minutes, preferred_frequency, preferred_days, preferred_time_of_day, minimum_duration_minutes, maximum_duration_minutes, flexible",
+          "id, name, default_duration_minutes, preferred_frequency, preferred_days, preferred_time_of_day, minimum_duration_minutes, maximum_duration_minutes, flexible, fixed_start_time, one_time_date",
         )
         .eq("user_id", userId)
         .eq("enabled", true),
@@ -120,6 +120,8 @@ export async function loadEngineInputs(
     maximumDurationMinutes: row.maximum_duration_minutes,
     flexible: row.flexible,
     goalIds: goalIdsByActivity.get(row.id) ?? [],
+    fixedStartTime: row.fixed_start_time ? row.fixed_start_time.slice(0, 5) : null,
+    oneTimeDate: row.one_time_date,
   }));
 
   const toRange = (start: string | null, end: string | null) => (start && end ? { start, end } : null);

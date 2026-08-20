@@ -5,6 +5,7 @@ import { getPlanForWeek } from "@/features/planning/services/getPlanForWeek";
 import { GeneratePlanButton } from "@/features/planning/components/GeneratePlanButton";
 import { WeekNavigator } from "@/features/planning/components/WeekNavigator";
 import { DayScheduleSection } from "@/features/planning/components/DayScheduleSection";
+import { UnplacedFixedTimeWarnings } from "@/features/planning/components/UnplacedFixedTimeWarnings";
 import { EmptyUserExperience } from "@/features/dashboard/components/EmptyUserExperience";
 import { addDays, getWeekStart, parseISODate, toISODate, todayInTimezone } from "@/features/planning/services/dateUtils";
 
@@ -48,6 +49,12 @@ export default async function WeeklyPlanPage({
           <div className="mt-6">
             <WeekNavigator weekStart={weekStart} isCurrentWeek={isCurrentWeek} />
           </div>
+
+          {plan ? (
+            <div className="mt-6">
+              <UnplacedFixedTimeWarnings warnings={plan.unplacedFixedTimeWarnings} />
+            </div>
+          ) : null}
 
           <div className="mt-6 flex flex-col gap-6">
             {!plan ? (

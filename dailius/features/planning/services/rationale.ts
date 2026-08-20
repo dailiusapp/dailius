@@ -1,6 +1,6 @@
 import { formatClockTime } from "./dateUtils";
 
-export type PlacementReason = "preferred-day" | "balance" | "fallback-from-preferred-day";
+export type PlacementReason = "preferred-day" | "balance" | "fallback-from-preferred-day" | "fixed-time";
 
 export type RationaleContext = {
   activityName: string;
@@ -11,6 +11,7 @@ export type RationaleContext = {
   protectedLabel: string | null; // set only when the slot landed near a protected-time range that day
   shortenedToMinutes: number | null; // set only when the minimum-duration fallback was used
   preferredTimeOfDay: string | null; // set only when the activity wanted this time of day but the slot landed outside it
+  startTime: string | null; // "HH:MM", set only when placementReason === "fixed-time"
 };
 
 // Fixed-order template concatenation so identical inputs always produce
@@ -25,6 +26,11 @@ export function buildRationale(context: RationaleContext): string {
     case "fallback-from-preferred-day":
       parts.push(
         `Scheduled ${context.dayLabel} instead of your preferred day because it didn't have enough available time.`,
+      );
+      break;
+    case "fixed-time":
+      parts.push(
+        `Scheduled ${context.dayLabel} at ${context.startTime ? formatClockTime(context.startTime) : "the requested time"} because you set this as an exact time.`,
       );
       break;
     case "balance":

@@ -6,6 +6,7 @@ import { currentTimeInTimezone, toISODate, todayInTimezone } from "@/features/pl
 import { WelcomeHeader } from "@/features/dashboard/components/WelcomeHeader";
 import { EmptyUserExperience } from "@/features/dashboard/components/EmptyUserExperience";
 import { TodaysFocusCard } from "@/features/dashboard/components/TodaysFocusCard";
+import { UnplacedFixedTimeWarnings } from "@/features/planning/components/UnplacedFixedTimeWarnings";
 import { WeeklyPlanPreviewCard } from "@/features/dashboard/components/WeeklyPlanPreviewCard";
 import { AIAssistantCard } from "@/features/dashboard/components/AIAssistantCard";
 import { QuickActionsCard } from "@/features/dashboard/components/QuickActionsCard";
@@ -35,6 +36,12 @@ export default async function DashboardPage() {
       {!onboardingCompleted ? (
         <div className="mt-8">
           <EmptyUserExperience />
+        </div>
+      ) : null}
+
+      {plan && plan.unplacedFixedTimeWarnings.length > 0 ? (
+        <div className="mt-6">
+          <UnplacedFixedTimeWarnings warnings={plan.unplacedFixedTimeWarnings} />
         </div>
       ) : null}
 
