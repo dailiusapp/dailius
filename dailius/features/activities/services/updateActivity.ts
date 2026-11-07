@@ -5,7 +5,7 @@ import { requireUser } from "@/features/auth/services/requireUser";
 import { getUserTimezone } from "@/features/auth/services/getUserTimezone";
 import { createClient } from "@/lib/supabase/server";
 import { generatePlan } from "@/features/planning/services/generatePlan";
-import { toISODate, todayInTimezone } from "@/features/planning/services/dateUtils";
+import { possibleInstants, toISODate, todayInTimezone } from "@/features/planning/services/dateUtils";
 import { checkFixedTimeConflict } from "./checkFixedTimeConflict";
 import type { UpdateActivityInput, UpdateActivityResult } from "../types";
 
@@ -42,6 +42,16 @@ export async function updateActivity(input: UpdateActivityInput): Promise<Update
   const timezone = (await getUserTimezone(user.id)) ?? "UTC";
   const supabase = await createClient();
 
+  if (input.oneTimeDate && input.fixedStartTime && !possibleInstants(input.oneTimeDate, input.fixedStartTime, timezone).length) {
+    return { ok: false, message: "That local time does not exist because the clocks change. Pick another time.", field: "fixedStartTime" };
+  }
+  if (input.oneTimeDate && input.fixedStartTime && possibleInstants(input.oneTimeDate, input.fixedStartTime, timezone).length > 1 && !input.timeOccurrence) {
+    return { ok: false, message: "This time occurs twice. Choose earlier or later under the clock-change preference.", field: "fixedStartTime" };
+  }
+  if (input.timeOccurrence != null && input.timeOccurrence !== "earlier" && input.timeOccurrence !== "later") {
+    return { ok: false, message: "Choose the earlier or later occurrence.", field: "fixedStartTime" };
+  }
+
   if (input.frequencyMode === "oneTime") {
     const today = toISODate(todayInTimezone(timezone));
     if (input.oneTimeDate! < today) {
@@ -62,6 +72,7 @@ export async function updateActivity(input: UpdateActivityInput): Promise<Update
       flexible: input.flexible,
       goalIds: input.goalIds,
       fixedStartTime: input.fixedStartTime,
+      timeOccurrence: input.timeOccurrence,
       oneTimeDate: input.frequencyMode === "oneTime" ? input.oneTimeDate : null,
     });
     if (!conflict.ok) {
@@ -79,6 +90,7 @@ export async function updateActivity(input: UpdateActivityInput): Promise<Update
       preferred_time_of_day: input.preferredTimeOfDay,
       flexible: input.flexible,
       fixed_start_time: input.fixedStartTime,
+      time_occurrence: input.timeOccurrence ?? null,
       one_time_date: input.frequencyMode === "oneTime" ? input.oneTimeDate : null,
     })
     .eq("id", input.id)
@@ -111,5 +123,5 @@ export async function updateActivity(input: UpdateActivityInput): Promise<Update
     console.error("Failed to regenerate plan after updating activity:", planResult.message);
   }
 
-  return { ok: true };
+  return { ok: true, timeChoices: planResult.ok ? undefined : planResult.timeChoices };
 }

@@ -1,4 +1,4 @@
-import type { PlanningOperation, ScheduledBlockDraft } from "@/features/planning/types";
+import type { PlanningOperation, ScheduledBlockDraft, ScheduleTimeChoice } from "@/features/planning/types";
 
 // A validated, not-yet-committed multi-operation proposal — replaces the
 // old single-activity "3 clickable time slots" PendingOptions shape.
@@ -20,6 +20,7 @@ export type ChatMessage = {
   role: "user" | "assistant";
   text: string;
   proposal?: PendingProposal;
+  timeChoices?: ScheduleTimeChoice[];
 };
 
 export type SendChatMessageResult = {

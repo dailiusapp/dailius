@@ -67,5 +67,5 @@ Editing onboarding inputs after successful completion does not overwrite already
 saved data; subsequent changes use the normal settings/goals/activities flows.
 
 This does not introduce full snapshot concurrency control across all schedule
-editors, change timezone boundaries, reconcile exact-time validation, add calendar
-pagination, or repair data from older partial writes. Those remain separate work.
+editors, calendar pagination, or repair of older partial writes. Task #2 now
+aligns timezone boundaries and exact-time validation; see `planning-time-rules.md`.

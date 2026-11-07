@@ -1,15 +1,16 @@
+import { occupiedSegments } from "./elapsedTime";
+import { commitmentSegments } from "./commitmentSegments";
 import type { EngineInput, ScheduledBlockDraft, Violation } from "../types";
-import { EXERCISE_ACTIVITY_NAMES, computeFreeBlocksForWeek, seedExistingBookings } from "./engine";
-import { timeToMinutes } from "./dateUtils";
+import { EXERCISE_ACTIVITY_NAMES, computeFreeBlocksForWeek, seedExistingBookings, instantRangeIsFree } from "./engine";
+import { getWeekStart, toISODate, timeToMinutes } from "./dateUtils";
 
 export type ValidationResult = { valid: true } | { valid: false; violations: Violation[] };
 
 type MinuteRange = { start: number; end: number };
 
 // Mirrors engine.ts's private subtractRange exactly (interval subtraction).
-// Duplicated rather than imported/exported — engine.ts is deliberately left
-// untouched by this refactor to avoid any regression risk to the
-// already-verified full-week generation and search paths.
+// Kept local to validation; absolute overlap checks also distinguish the
+// earlier/later occurrences when the clocks go back.
 function subtractRange(ranges: MinuteRange[], sub: MinuteRange): MinuteRange[] {
   const result: MinuteRange[] = [];
   for (const range of ranges) {
@@ -57,10 +58,13 @@ export function validateSchedule(resultingBlocks: ScheduledBlockDraft[], input: 
     days,
     input.commitments
       .filter((commitment) => !movedCommitmentIds.has(commitment.id))
+      .flatMap((commitment) => commitmentSegments(commitment, toISODate(getWeekStart(input.today))))
       .map((commitment) => ({
         scheduledDate: commitment.scheduledDate,
         startTime: commitment.startTime,
         endTime: commitment.endTime,
+        startInstant: commitment.startInstant,
+        endInstant: commitment.endInstant,
         isExercise: false,
       })),
   );
@@ -80,8 +84,12 @@ export function validateSchedule(resultingBlocks: ScheduledBlockDraft[], input: 
   for (const block of sortedBlocks) {
     const day = days.find((d) => d.date === block.scheduledDate);
     const isExercise = EXERCISE_ACTIVITY_NAMES.has(block.activityName.trim().toLowerCase());
-    const start = timeToMinutes(block.startTime);
-    const end = timeToMinutes(block.endTime);
+    const occupied = block.startInstant && block.endInstant
+      ? occupiedSegments(block.startInstant, block.endInstant, input.timezone ?? "UTC") : [];
+    const start = occupied.length === 1 ? timeToMinutes(occupied[0].startTime) : timeToMinutes(block.startTime);
+    const end = occupied.length === 1 ? timeToMinutes(occupied[0].endTime) : timeToMinutes(block.endTime);
+    const duration = block.startInstant && block.endInstant
+      ? (Date.parse(block.endInstant) - Date.parse(block.startInstant)) / 60_000 : end - start;
 
     if (!day || day.isPast) {
       violations.push({
@@ -90,6 +98,13 @@ export function validateSchedule(resultingBlocks: ScheduledBlockDraft[], input: 
         detail: `${block.scheduledDate} is not a valid day for this week's plan.`,
         date: block.scheduledDate,
       });
+      continue;
+    }
+
+    const activity = input.activities.find((candidate) => candidate.id === block.activityId);
+    if (!block.commitmentId && activity?.fixedStartTime && activity.fixedStartTime !== block.startTime) {
+      violations.push({ type: "FIXED_TIME", activityName: block.activityName,
+        detail: `Must start at its explicit time ${activity.fixedStartTime}.`, date: block.scheduledDate });
       continue;
     }
 
@@ -105,7 +120,8 @@ export function validateSchedule(resultingBlocks: ScheduledBlockDraft[], input: 
     }
 
     const fits = day.freeRanges.some((range) => range.start <= start && end <= range.end);
-    if (!fits) {
+    const absoluteConflict = block.startInstant && block.endInstant && !instantRangeIsFree(day, block.startInstant, block.endInstant);
+    if (!fits || absoluteConflict) {
       // If the block overlaps the day's pristine (pre-booking) availability
       // at all, this time slot was available in principle — something else
       // (a commitment or another block) must be occupying it now, so it's a
@@ -115,9 +131,9 @@ export function validateSchedule(resultingBlocks: ScheduledBlockDraft[], input: 
       const overlapsPristineAvailability =
         pristineDay?.freeRanges.some((range) => range.start < end && start < range.end) ?? false;
       violations.push({
-        type: overlapsPristineAvailability ? "TIME_CONFLICT" : "AVAILABILITY",
+        type: absoluteConflict || overlapsPristineAvailability ? "TIME_CONFLICT" : "AVAILABILITY",
         activityName: block.activityName,
-        detail: overlapsPristineAvailability
+        detail: absoluteConflict || overlapsPristineAvailability
           ? `${block.startTime}–${block.endTime} on ${block.scheduledDate} conflicts with another commitment or scheduled activity.`
           : `${block.startTime}–${block.endTime} on ${block.scheduledDate} is outside your available windows.`,
         date: block.scheduledDate,
@@ -125,7 +141,8 @@ export function validateSchedule(resultingBlocks: ScheduledBlockDraft[], input: 
       continue;
     }
 
-    if (isExercise && exerciseCutoffMinutes !== null && end > exerciseCutoffMinutes) {
+    const isExplicitTime = !block.commitmentId && activity?.fixedStartTime === block.startTime;
+    if (isExercise && !isExplicitTime && exerciseCutoffMinutes !== null && end > exerciseCutoffMinutes) {
       violations.push({
         type: "EXERCISE_CUTOFF",
         activityName: block.activityName,
@@ -135,7 +152,7 @@ export function validateSchedule(resultingBlocks: ScheduledBlockDraft[], input: 
       continue;
     }
 
-    if (maxDailyMinutes !== null && day.plannedMinutes + (end - start) > maxDailyMinutes) {
+    if (maxDailyMinutes !== null && day.plannedMinutes + duration > maxDailyMinutes) {
       violations.push({
         type: "MAX_DAILY_DURATION",
         activityName: block.activityName,
@@ -147,8 +164,11 @@ export function validateSchedule(resultingBlocks: ScheduledBlockDraft[], input: 
 
     // Valid — consume this block's range so later blocks on the same day
     // correctly see it as booked.
-    day.freeRanges = subtractRange(day.freeRanges, { start, end });
-    day.plannedMinutes += end - start;
+    if (!day.hasRepeatedMinutes || !block.startInstant || !block.endInstant) {
+      day.freeRanges = subtractRange(day.freeRanges, { start, end });
+    }
+    if (block.startInstant && block.endInstant) day.busyInstants.push({ start: Date.parse(block.startInstant), end: Date.parse(block.endInstant) });
+    day.plannedMinutes += duration;
     if (isExercise) day.hasExerciseBlock = true;
   }
 

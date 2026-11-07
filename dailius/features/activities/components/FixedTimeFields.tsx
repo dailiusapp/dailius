@@ -28,6 +28,8 @@ export function FixedTimeFields({
   disabled,
   error,
   idPrefix,
+  timeOccurrence,
+  onOccurrenceChange,
 }: {
   fixedStartTime: string | null;
   onChange: (value: string | null) => void;
@@ -35,6 +37,8 @@ export function FixedTimeFields({
   disabled?: boolean;
   error?: string;
   idPrefix: string;
+  timeOccurrence?: "earlier" | "later" | null;
+  onOccurrenceChange?: (value: "earlier" | "later" | null) => void;
 }) {
   const enabled = fixedStartTime !== null;
   const endTime = fixedStartTime ? minutesToTime(timeToMinutes(fixedStartTime) + durationMinutes) : null;
@@ -52,6 +56,16 @@ export function FixedTimeFields({
         Set an exact time — always scheduled then, never shifted by the planner
       </label>
 
+      {onOccurrenceChange ? <label className="mt-2 block text-sm text-gray-600">
+        When the clocks go back and a time occurs twice
+        <select value={timeOccurrence ?? ""} disabled={disabled}
+          onChange={(event) => onOccurrenceChange((event.target.value || null) as "earlier" | "later" | null)}
+          className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2">
+          <option value="">Ask me when needed</option>
+          <option value="earlier">Use the earlier occurrence</option>
+          <option value="later">Use the later occurrence</option>
+        </select>
+      </label> : null}
       {enabled ? (
         <label className="mt-2 block text-sm" htmlFor={`${idPrefix}-fixed-time`}>
           <span className="font-medium text-navy">Start time</span>

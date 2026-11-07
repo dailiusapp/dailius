@@ -1,6 +1,9 @@
+import { occupiedSegments } from "./elapsedTime";
+import { commitmentSegments } from "./commitmentSegments";
+import type { TimeChoices } from "./scheduleTimes";
 import type { ActivityInput, CommitmentInput, EngineInput, GoalPriority, PlanningOperation, ScheduledBlock, ScheduledBlockDraft } from "../types";
 import { EXERCISE_ACTIVITY_NAMES, computeFreeBlocksForWeek, placeOccurrence, prioritizeActivities, seedExistingBookings } from "./engine";
-import { dayOfWeekLabel, parseISODate, timeToMinutes, toISODate } from "./dateUtils";
+import { dayOfWeekLabel, getWeekStart, parseISODate, timeToMinutes, toISODate } from "./dateUtils";
 
 export type ApplyOperationsResult =
   | {
@@ -23,11 +26,12 @@ export function applyPlanningOperations(
   operations: PlanningOperation[],
   currentBlocks: ScheduledBlock[],
   input: EngineInput,
+  timeChoices: TimeChoices = {},
 ): ApplyOperationsResult {
   const activitiesById = new Map<string, ActivityInput>(input.activities.map((activity) => [activity.id, activity]));
   const goalIds = new Set(input.goals.map((goal) => goal.id));
   const blocksById = new Map<string, ScheduledBlock>(currentBlocks.map((block) => [block.id, block]));
-  const commitmentsById = new Map<string, CommitmentInput>(input.commitments.map((commitment) => [commitment.id, commitment]));
+  const commitmentsById = new Map<string, CommitmentInput>(input.commitments.flatMap((commitment) => commitmentSegments(commitment, toISODate(getWeekStart(input.today)))).map((commitment) => [commitment.id, commitment]));
 
   const touchedBlockIds = new Set<string>(); // MOVE/REMOVE sources — vacate their old slot
   const touchedCommitmentIds = new Set<string>(); // MOVE_COMMITMENT sources — vacate their old slot
@@ -63,23 +67,22 @@ export function applyPlanningOperations(
   const untouchedBlocks = currentBlocks.filter(
     (block) => (block.status === "scheduled" || block.status === "completed") && !touchedBlockIds.has(block.id),
   );
-  seedExistingBookings(
-    days,
-    untouchedBlocks.map((block) => ({
-      scheduledDate: block.scheduledDate,
-      startTime: block.startTime,
-      endTime: block.endTime,
-      isExercise: EXERCISE_ACTIVITY_NAMES.has(block.activityName.trim().toLowerCase()),
-    })),
-  );
+  seedExistingBookings(days, untouchedBlocks.flatMap((block) => {
+    const ranges = block.startInstant && block.endInstant
+      ? occupiedSegments(block.startInstant, block.endInstant, input.timezone ?? "UTC") : [block];
+    return ranges.map((range) => ({ ...range, startInstant: block.startInstant, endInstant: block.endInstant, isExercise: EXERCISE_ACTIVITY_NAMES.has(block.activityName.trim().toLowerCase()) }));
+  }));
   seedExistingBookings(
     days,
     input.commitments
       .filter((commitment) => !touchedCommitmentIds.has(commitment.id))
+      .flatMap((commitment) => commitmentSegments(commitment, toISODate(getWeekStart(input.today))))
       .map((commitment) => ({
         scheduledDate: commitment.scheduledDate,
         startTime: commitment.startTime,
         endTime: commitment.endTime,
+        startInstant: commitment.startInstant,
+        endInstant: commitment.endInstant,
         isExercise: false,
       })),
   );
@@ -134,7 +137,7 @@ export function applyPlanningOperations(
   for (const op of operations.filter((o) => o.type === "MOVE_COMMITMENT")) {
     if (op.type !== "MOVE_COMMITMENT") continue;
     const commitment = commitmentsById.get(op.commitmentId)!;
-    const durationMinutes = timeToMinutes(commitment.endTime) - timeToMinutes(commitment.startTime);
+    const durationMinutes = commitment.durationMinutes ?? (timeToMinutes(commitment.endTime) - timeToMinutes(commitment.startTime));
     const targetDayLabel = dayOfWeekLabel(parseISODate(op.targetDate));
 
     // Unlike MOVE_ACTIVITY's activityForSearch, this is deliberately
@@ -158,6 +161,7 @@ export function applyPlanningOperations(
       goalIds: [],
       fixedStartTime: null,
       oneTimeDate: null,
+      timeOccurrence: timeChoices[`commitment:${commitment.id}`],
     };
     const [resolved] = prioritizeActivities({ ...input, activities: [commitmentForSearch] });
 
@@ -184,6 +188,9 @@ export function applyPlanningOperations(
       startTime: block.startTime,
       endTime: block.endTime,
       rationale: block.rationale,
+      startInstant: block.startInstant ?? undefined,
+      endInstant: block.endInstant ?? undefined,
+      timeOccurrence: block.timeOccurrence,
     })),
     ...newBlocks,
   ];

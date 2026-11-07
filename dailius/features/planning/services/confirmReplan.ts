@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/auth/services/requireUser";
 import { createClient } from "@/lib/supabase/server";
-import type { PlanningOperation } from "../types";
+import { resolveScheduleTimes, type TimeChoices } from "./scheduleTimes";
+import type { PlanningOperation, ScheduleTimeChoice } from "../types";
 import { getCurrentPlan } from "./getCurrentPlan";
 import { loadEngineInputs } from "./loadEngineInputs";
 import { applyPlanningOperations } from "./applyPlanningOperations";
@@ -13,13 +14,13 @@ import { localDateTimeToInstant } from "./dateUtils";
 const GENERIC_ERROR_MESSAGE = "Something went wrong applying those changes. Please try again.";
 const STALE_MESSAGE = "That plan has changed since I proposed this. Please ask again for updated options.";
 
-export type ConfirmReplanResult = { ok: true; message: string } | { ok: false; message: string };
+export type ConfirmReplanResult = { ok: true; message: string } | { ok: false; message: string; timeChoices?: ScheduleTimeChoice[] };
 
 // Takes the client-echoed operation list from a proposeReplan.ts proposal
 // and re-validates everything fresh before writing anything — never trusts
 // the client-echoed proposal blindly, same principle confirmReschedule.ts
 // already applies to a single operation, generalized here to a batch.
-export async function confirmReplan(operations: PlanningOperation[]): Promise<ConfirmReplanResult> {
+export async function confirmReplan(operations: PlanningOperation[], timeChoices: TimeChoices = {}): Promise<ConfirmReplanResult> {
   const user = await requireUser();
   const supabase = await createClient();
 
@@ -33,13 +34,18 @@ export async function confirmReplan(operations: PlanningOperation[]): Promise<Co
     return { ok: false, message: loaded.message };
   }
 
+  loaded.input.activities = loaded.input.activities.map((activity) => ({ ...activity, timeOccurrence: timeChoices[activity.id] ?? activity.timeOccurrence }));
+
   // Full re-check against fresh DB state before any write — all-or-nothing
   // at the check stage (docs/requirements/scheduling refactoring.md §27:
   // "do not partially apply the AI proposal").
-  const applied = applyPlanningOperations(operations, plan.blocks, loaded.input);
+  const applied = applyPlanningOperations(operations, plan.blocks, loaded.input, timeChoices);
   if (!applied.ok) {
     return { ok: false, message: STALE_MESSAGE };
   }
+
+  const times = resolveScheduleTimes(applied.newBlocks, loaded.input, timeChoices);
+  if (!times.ok) return times;
 
   const validation = validateSchedule(applied.resultingBlocks, loaded.input);
   if (!validation.valid) {
@@ -63,13 +69,16 @@ export async function confirmReplan(operations: PlanningOperation[]): Promise<Co
       end_time: block.endTime,
       rationale: block.rationale,
       original_scheduled_date: block.originalScheduledDate ?? null,
+      time_occurrence: block.timeOccurrence ?? null,
+      start_instant: block.startInstant ?? null,
+      end_instant: block.endInstant ?? null,
     })),
     p_commitment_moves: applied.newBlocks.filter((block) => block.commitmentId).map((move) => {
-      const timezone = commitmentsById.get(move.commitmentId!)!.timezone;
+      const timezone = loaded.input.timezone ?? commitmentsById.get(move.commitmentId!)!.timezone;
       return {
         id: move.commitmentId,
-        start_time: localDateTimeToInstant(move.scheduledDate, move.startTime, timezone).toISOString(),
-        end_time: localDateTimeToInstant(move.scheduledDate, move.endTime, timezone).toISOString(),
+        start_time: (move.startInstant ?? localDateTimeToInstant(move.scheduledDate, move.startTime, timezone, move.timeOccurrence).toISOString()),
+        end_time: (move.endInstant ?? localDateTimeToInstant(move.scheduledDate, move.endTime, timezone, move.timeOccurrence).toISOString()),
       };
     }),
     p_removed_block_ids: [...new Set(applied.removedBlockIds)],

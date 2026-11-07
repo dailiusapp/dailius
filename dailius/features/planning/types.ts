@@ -11,6 +11,9 @@ export type ScheduledBlock = {
   endTime: string; // "HH:MM"
   status: ScheduledBlockStatus;
   rationale: string;
+  startInstant?: string | null;
+  endInstant?: string | null;
+  timeOccurrence?: "earlier" | "later" | null;
 };
 
 // Matches the `source` check constraint on the `commitments` table (see
@@ -23,6 +26,7 @@ export type CommitmentSource = "Manual" | "Google Calendar" | "Apple Calendar" |
 // planner's perspective (imported from Google Calendar, or eventually
 // entered manually), distinct from a ScheduledBlock which the engine placed.
 export type CommitmentBlock = {
+  timeRangeLabel?: string;
   id: string;
   title: string;
   scheduledDate: string; // "YYYY-MM-DD"
@@ -43,9 +47,11 @@ export type WeeklyPlan = {
   unplacedFixedTimeWarnings: string[];
 };
 
+export type ScheduleTimeChoice = { activityId: string; activityName: string; date: string; time: string; timezone: string };
+
 export type GeneratePlanResult =
   | { ok: true; weeklyPlanId: string; blocksPlaced: number }
-  | { ok: false; message: string };
+  | { ok: false; message: string; timeChoices?: ScheduleTimeChoice[] };
 
 // --- Pure engine input/output types (no Supabase shapes leak in here) ---
 
@@ -86,6 +92,7 @@ export type ActivityInput = {
   // engine treats it as a single occurrence restricted to that date rather
   // than a recurring weekly pattern.
   oneTimeDate: string | null;
+  timeOccurrence?: "earlier" | "later" | null;
 };
 
 export type ConstraintInput = {
@@ -101,12 +108,16 @@ export type PreferenceInput = {
 // Fixed external events (e.g. imported from Google Calendar) the engine
 // must never schedule over — UNLESS source is "Manual" and a MOVE_COMMITMENT
 // op explicitly targets this id, in which case applyPlanningOperations.ts
-// treats it as a placeable occurrence instead. Same-day only — see
-// syncGoogleCalendarEvents.ts for why multi-day/all-day events are excluded
-// before they ever reach here. `timezone` is needed to re-encode a moved
-// commitment's new local date/time back to an instant on write (see
-// confirmReplan.ts) — it's never itself changed by a move.
+// treats it as a placeable occurrence instead. Timed multi-day commitments
+// retain their endpoints and are expanded into daily occupied segments.
+// `timezone` is the profile planning zone (UTC when missing), used to
+// interpret a moved commitment's local date/time. The source event timezone
+// remains metadata on the database row.
 export type CommitmentInput = {
+  endDate?: string;
+  startInstant?: string;
+  endInstant?: string;
+  durationMinutes?: number;
   id: string;
   title: string;
   scheduledDate: string;
@@ -117,6 +128,7 @@ export type CommitmentInput = {
 };
 
 export type EngineInput = {
+  timezone?: string;
   today: Date;
   goals: GoalInput[];
   activities: ActivityInput[];
@@ -133,6 +145,9 @@ export type ScheduledBlockDraft = {
   startTime: string;
   endTime: string;
   rationale: string;
+  startInstant?: string;
+  endInstant?: string;
+  timeOccurrence?: "earlier" | "later" | null;
   // Set only when this draft results from a MOVE_ACTIVITY op — the date the
   // activity moved FROM, so a later full regeneration knows which preferred
   // day is already satisfied by this placement. See engine.ts's `LockedBlock`.
@@ -190,7 +205,8 @@ export type ViolationType =
   | "PROTECTED_TIME"
   | "AVAILABILITY"
   | "MAX_DAILY_DURATION"
-  | "EXERCISE_CUTOFF";
+  | "EXERCISE_CUTOFF"
+  | "FIXED_TIME";
 
 export type Violation = {
   type: ViolationType;
@@ -232,6 +248,7 @@ export type PlanningContextBlock = {
 // enforced structurally instead of just by instruction. See
 // buildPlanningContext.ts.
 export type PlanningContextCommitment = {
+  endDate?: string;
   id: string | null;
   title: string;
   scheduledDate: string;

@@ -1,6 +1,7 @@
+import { commitmentInput, commitmentSegments } from "./commitmentSegments";
 import { createClient } from "@/lib/supabase/server";
-import type { CommitmentSource, ScheduledBlockStatus, WeeklyPlan, WeeklyPlanStatus } from "../types";
-import { addDays, instantToLocalDateTime, localDateTimeToInstant, parseISODate, toISODate } from "./dateUtils";
+import type { ScheduledBlockStatus, WeeklyPlan, WeeklyPlanStatus } from "../types";
+import { weekBounds } from "./dateUtils";
 
 export async function getPlanForWeek(
   userId: string,
@@ -25,21 +26,13 @@ export async function getPlanForWeek(
     return null;
   }
 
-  // Bounds must be the user's own local midnight, not the server's — the
-  // server runs in UTC, so a commitment near the start/end of the user's
-  // week (e.g. a evening pick in a timezone behind UTC) can have a UTC
-  // instant that falls on the adjacent UTC calendar day, landing just
-  // outside a server-local window even though it's correctly "this week"
-  // for the user.
   const tz = timezone ?? "UTC";
-  const weekEndISO = toISODate(addDays(parseISODate(weekStart), 7));
-  const weekStartInstant = localDateTimeToInstant(weekStart, "00:00", tz);
-  const weekEndInstant = localDateTimeToInstant(weekEndISO, "00:00", tz);
+  const bounds = weekBounds(weekStart, tz);
 
   const [blocksRes, commitmentsRes] = await Promise.all([
     supabase
       .from("scheduled_blocks")
-      .select("id, activity_id, scheduled_date, start_time, end_time, status, rationale, activities(name)")
+      .select("id, activity_id, scheduled_date, start_time, end_time, status, rationale, start_instant, end_instant, time_occurrence, activities(name)")
       .eq("weekly_plan_id", planRow.id)
       .order("scheduled_date", { ascending: true })
       .order("start_time", { ascending: true }),
@@ -47,8 +40,8 @@ export async function getPlanForWeek(
       .from("commitments")
       .select("id, title, start_time, end_time, timezone, source")
       .eq("user_id", userId)
-      .gte("start_time", weekStartInstant.toISOString())
-      .lt("start_time", weekEndInstant.toISOString()),
+      .lt("start_time", bounds.end.toISOString())
+      .gt("end_time", bounds.start.toISOString()),
   ]);
 
   if (blocksRes.error) {
@@ -71,18 +64,21 @@ export async function getPlanForWeek(
       endTime: row.end_time.slice(0, 5),
       status: row.status as ScheduledBlockStatus,
       rationale: row.rationale,
+      startInstant: row.start_instant,
+      endInstant: row.end_instant,
+      timeOccurrence: row.time_occurrence,
     })),
-    commitments: (commitmentsRes.data ?? []).map((row) => {
-      const start = instantToLocalDateTime(row.start_time, row.timezone);
-      const end = instantToLocalDateTime(row.end_time, row.timezone);
-      return {
-        id: row.id,
-        title: row.title,
-        scheduledDate: start.date,
-        startTime: start.time,
-        endTime: end.time,
-        source: row.source as CommitmentSource,
-      };
+    commitments: (commitmentsRes.data ?? []).flatMap((row) => {
+      const original = commitmentInput(row, tz);
+      const wallDuration = (Date.parse(`${original.endDate}T${original.endTime}:00Z`) - Date.parse(`${original.scheduledDate}T${original.startTime}:00Z`)) / 60_000;
+      const clockChanged = Math.abs(wallDuration - original.durationMinutes!) >= 1;
+      const formatter = clockChanged ? new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", timeZoneName: "shortOffset" }) : null;
+      return commitmentSegments(original, weekStart).map((segment) => ({
+        id: segment.id, title: segment.title, scheduledDate: segment.scheduledDate,
+        startTime: segment.startTime, endTime: segment.endTime, source: segment.source,
+        timeRangeLabel: formatter && original.scheduledDate === original.endDate
+          ? `${formatter.format(new Date(row.start_time))}–${formatter.format(new Date(row.end_time))}` : undefined,
+      }));
     }),
     unplacedFixedTimeWarnings: (planRow.unplaced_fixed_time_warnings as string[] | null) ?? [],
   };

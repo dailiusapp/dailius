@@ -53,7 +53,8 @@ export async function sendChatMessage(userMessage: string): Promise<SendChatMess
   // "don't match" list instead, so a message naming one of these can't get
   // fuzzy-matched onto an unrelated real activity/commitment purely by name
   // similarity, silently rescheduling the wrong thing.
-  const manualCommitmentCandidates = plan.commitments
+  const uniqueCommitments = [...new Map(plan.commitments.map((commitment) => [commitment.id, commitment])).values()];
+  const manualCommitmentCandidates = uniqueCommitments
     .filter((commitment) => commitment.source === "Manual")
     .map((commitment) => ({ id: commitment.id, title: commitment.title, scheduledDate: commitment.scheduledDate }));
   const fixedCommitmentTitles = [

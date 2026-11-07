@@ -12,7 +12,7 @@ export async function getActivityForEdit(activityId: string): Promise<GetActivit
   const { data: activity, error } = await supabase
     .from("activities")
     .select(
-      "id, name, default_duration_minutes, preferred_frequency, preferred_days, preferred_time_of_day, flexible, fixed_start_time, one_time_date",
+      "id, name, default_duration_minutes, preferred_frequency, preferred_days, preferred_time_of_day, flexible, fixed_start_time, one_time_date, time_occurrence",
     )
     .eq("id", activityId)
     .eq("user_id", user.id)
@@ -52,6 +52,7 @@ export async function getActivityForEdit(activityId: string): Promise<GetActivit
       flexible: activity.flexible,
       goalIds: (goalLinks ?? []).map((link) => link.goal_id),
       oneTimeDate: activity.one_time_date,
+      timeOccurrence: activity.time_occurrence,
       fixedStartTime: activity.fixed_start_time ? activity.fixed_start_time.slice(0, 5) : null,
     },
     goals,

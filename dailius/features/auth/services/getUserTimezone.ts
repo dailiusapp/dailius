@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 // timezone (not the full Profile) — e.g. planning services keyed on userId.
 export async function getUserTimezone(userId: string): Promise<string | null> {
   const supabase = await createClient();
-  const { data } = await supabase.from("profiles").select("timezone").eq("id", userId).maybeSingle();
+  const { data, error } = await supabase.from("profiles").select("timezone").eq("id", userId).maybeSingle();
+  if (error) throw error;
   return data?.timezone ?? null;
 }

@@ -4,6 +4,8 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { sendChatMessage } from "../services/sendChatMessage";
+import { TimeOccurrenceChoices } from "@/features/planning/components/TimeOccurrenceChoices";
+import type { TimeChoices } from "@/features/planning/services/scheduleTimes";
 import { confirmChatReplan } from "../services/confirmChatReplan";
 import type { ChatMessage, PendingProposal } from "../types";
 
@@ -24,6 +26,7 @@ export function AssistantChat({ variant = "standalone" }: { variant?: "standalon
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([GREETING]);
   const [input, setInput] = useState("");
+  const [choices, setChoices] = useState<TimeChoices>({});
   const [isSending, setIsSending] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -75,11 +78,15 @@ export function AssistantChat({ variant = "standalone" }: { variant?: "standalon
 
   async function handleAcceptProposal(messageId: string, proposal: PendingProposal) {
     if (isSending) return;
-    clearProposal(messageId);
     setIsSending(true);
 
     try {
-      const result = await confirmChatReplan(proposal.operations);
+      const result = await confirmChatReplan(proposal.operations, choices);
+      if (result.timeChoices?.length) {
+        setMessages((prev) => prev.map((message) => message.id === messageId ? { ...message, timeChoices: result.timeChoices } : message));
+      } else {
+        clearProposal(messageId);
+      }
       setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", text: result.reply }]);
       if (result.ok) router.refresh();
     } catch (error) {
@@ -116,6 +123,7 @@ export function AssistantChat({ variant = "standalone" }: { variant?: "standalon
                       </li>
                     ))}
                   </ul>
+                  <TimeOccurrenceChoices requests={message.timeChoices ?? []} choices={choices} onChange={setChoices} disabled={isSending} />
                   <div className="flex gap-2">
                     <button
                       type="button"

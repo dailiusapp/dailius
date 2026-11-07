@@ -2,6 +2,8 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { GeneratePlanButton } from "@/features/planning/components/GeneratePlanButton";
+import type { ScheduleTimeChoice } from "@/features/planning/types";
 import { cn } from "@/lib/cn";
 import { FormField } from "@/features/auth/components/FormField";
 import type { Goal } from "@/features/goals/types";
@@ -41,6 +43,7 @@ export function AddActivityForm({ initialGoals }: { initialGoals: Goal[] }) {
   const [flexible, setFlexible] = useState(DEFAULTS.flexible);
   const [goalIds, setGoalIds] = useState<string[]>([]);
   const [oneTimeDate, setOneTimeDate] = useState<string | null>(DEFAULTS.oneTimeDate);
+  const [timeOccurrence, setTimeOccurrence] = useState<"earlier" | "later" | null>(null);
   const [fixedStartTime, setFixedStartTime] = useState<string | null>(DEFAULTS.fixedStartTime);
   // Safari doesn't reliably fire onChange/input for a native <input
   // type="date"> when a value is picked via the OS-level picker UI, so React
@@ -50,6 +53,7 @@ export function AddActivityForm({ initialGoals }: { initialGoals: Goal[] }) {
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   const [fieldError, setFieldError] = useState<Partial<Record<ActivityFieldErrors, string>>>({});
+  const [pendingTimeChoices, setPendingTimeChoices] = useState<ScheduleTimeChoice[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -80,6 +84,7 @@ export function AddActivityForm({ initialGoals }: { initialGoals: Goal[] }) {
     setGoalIds([]);
     setOneTimeDate(DEFAULTS.oneTimeDate);
     setFixedStartTime(DEFAULTS.fixedStartTime);
+    setTimeOccurrence(null);
   }
 
   function validate(dateValue: string | null): Partial<Record<ActivityFieldErrors, string>> {
@@ -127,6 +132,7 @@ export function AddActivityForm({ initialGoals }: { initialGoals: Goal[] }) {
       goalIds,
       oneTimeDate: dateValue,
       fixedStartTime,
+      timeOccurrence,
     });
     setIsSubmitting(false);
 
@@ -139,9 +145,10 @@ export function AddActivityForm({ initialGoals }: { initialGoals: Goal[] }) {
       return;
     }
 
+    setPendingTimeChoices(result.timeChoices ?? []);
     if (dateInputRef.current) dateInputRef.current.value = "";
     resetForm();
-    setSuccessMessage("Added! You can add another activity below.");
+    setSuccessMessage(result.timeChoices?.length ? "Activity added. Choose a clock occurrence below to finish scheduling." : "Added! You can add another activity below.");
   }
 
   return (
@@ -152,6 +159,7 @@ export function AddActivityForm({ initialGoals }: { initialGoals: Goal[] }) {
         </p>
       ) : null}
 
+      {pendingTimeChoices.length ? <GeneratePlanButton key={pendingTimeChoices.map((choice) => choice.activityId).join(",")} label="Finish scheduling" initialTimeChoices={pendingTimeChoices} onGenerated={() => setPendingTimeChoices([])} /> : null}
       <FormField
         id="activity-name"
         label="Activity name"
@@ -275,6 +283,8 @@ export function AddActivityForm({ initialGoals }: { initialGoals: Goal[] }) {
       </div>
 
       <FixedTimeFields
+        timeOccurrence={timeOccurrence}
+        onOccurrenceChange={setTimeOccurrence}
         idPrefix="activity-add"
         fixedStartTime={fixedStartTime}
         onChange={setFixedStartTime}

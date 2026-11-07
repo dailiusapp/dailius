@@ -68,6 +68,8 @@ function ManualCommitmentEditForm({
 
   const [title, setTitle] = useState(commitment.title);
   const [scheduledTime, setScheduledTime] = useState(commitment.scheduledTime);
+  const [timeOccurrence, setTimeOccurrence] = useState<"earlier" | "later" | null>(commitment.timeOccurrence ?? null);
+  const [needsTimeChoice, setNeedsTimeChoice] = useState(Boolean(commitment.timeOccurrence));
   const [durationMinutes, setDurationMinutes] = useState(commitment.durationMinutes);
   // Kept uncontrolled for the same Safari reason AddActivityForm's date
   // input is — see that file's dateInputRef comment.
@@ -103,10 +105,12 @@ function ManualCommitmentEditForm({
       scheduledDate,
       scheduledTime,
       durationMinutes,
+      timeOccurrence,
     });
     setIsSaving(false);
 
     if (!result.ok) {
+      setNeedsTimeChoice(result.needsTimeChoice ?? false);
       if (result.field) {
         setFieldError({ [result.field]: result.message });
       } else {
@@ -174,6 +178,7 @@ function ManualCommitmentEditForm({
             type="date"
             ref={dateInputRef}
             defaultValue={commitment.scheduledDate}
+            onChange={() => { setTimeOccurrence(null); setNeedsTimeChoice(false); }}
             disabled={isSaving}
             aria-invalid={fieldError.scheduledDate ? true : undefined}
             className={cn(
@@ -196,7 +201,7 @@ function ManualCommitmentEditForm({
             id="commitment-time"
             value={scheduledTime}
             disabled={isSaving}
-            onChange={(event) => setScheduledTime(event.target.value)}
+            onChange={(event) => { setScheduledTime(event.target.value); setTimeOccurrence(null); setNeedsTimeChoice(false); }}
             aria-invalid={fieldError.scheduledTime ? true : undefined}
             className={cn(
               "mt-1.5 block w-full rounded-xl border px-4 py-3 text-[15px] focus:outline-none focus:ring-2",
@@ -218,6 +223,17 @@ function ManualCommitmentEditForm({
           ) : null}
         </label>
       </div>
+
+      {needsTimeChoice ? <label className="block text-sm text-gray-700">
+        This time occurs twice. Which occurrence do you mean?
+        <select value={timeOccurrence ?? ""} disabled={isSaving}
+          onChange={(event) => setTimeOccurrence(event.target.value as "earlier" | "later")}
+          className="mt-1 block w-full rounded-xl border border-gray-300 px-3 py-2">
+          <option value="" disabled>Choose an occurrence</option>
+          <option value="earlier">Earlier occurrence</option>
+          <option value="later">Later occurrence</option>
+        </select>
+      </label> : null}
 
       <label className="block text-sm">
         <span className="font-medium text-navy">Duration</span>

@@ -1,6 +1,7 @@
+import { commitmentInput } from "./commitmentSegments";
 import { createClient } from "@/lib/supabase/server";
-import type { ActivityInput, AvailabilityInput, CommitmentInput, CommitmentSource, EngineInput, GoalInput } from "../types";
-import { addDays, getWeekStart, instantToLocalDateTime, todayInTimezone } from "./dateUtils";
+import type { ActivityInput, AvailabilityInput, EngineInput, GoalInput } from "../types";
+import { getWeekStart, toISODate, todayInTimezone, weekBounds } from "./dateUtils";
 import { getUserTimezone } from "@/features/auth/services/getUserTimezone";
 
 const GENERIC_ERROR_MESSAGE = "Something went wrong loading your planning data. Please try again.";
@@ -9,20 +10,10 @@ export async function loadEngineInputs(
   userId: string,
 ): Promise<{ ok: true; input: EngineInput } | { ok: false; message: string }> {
   const supabase = await createClient();
-  const timezone = await getUserTimezone(userId);
+  const timezone = (await getUserTimezone(userId)) ?? "UTC";
   const today = todayInTimezone(timezone);
 
-  // NOTE: the query window below (weekStart/weekEnd) still uses server-local
-  // instant boundaries — a commitment within an hour or two of the Mon/Sun
-  // edge could in principle land on the wrong side of this query window in
-  // the user's own timezone. `today` itself (used for EngineInput.today,
-  // isPast, and every date-portion-only comparison) is timezone-correct as
-  // of profiles.timezone; only this specific instant-range query remains a
-  // narrower, distinct gap from the wrong-day-entirely bug that
-  // instantToLocalDateTime already fixes for every commitment away from the
-  // edges.
-  const weekStart = getWeekStart(today);
-  const weekEnd = addDays(weekStart, 7);
+  const bounds = weekBounds(toISODate(getWeekStart(today)), timezone);
 
   const [goalsRes, activitiesRes, constraintsRes, preferencesRes, availabilityRes, commitmentsRes] =
     await Promise.all([
@@ -30,7 +21,7 @@ export async function loadEngineInputs(
       supabase
         .from("activities")
         .select(
-          "id, name, default_duration_minutes, preferred_frequency, preferred_days, preferred_time_of_day, minimum_duration_minutes, maximum_duration_minutes, flexible, fixed_start_time, one_time_date",
+          "id, name, default_duration_minutes, preferred_frequency, preferred_days, preferred_time_of_day, minimum_duration_minutes, maximum_duration_minutes, flexible, fixed_start_time, one_time_date, time_occurrence",
         )
         .eq("user_id", userId)
         .eq("enabled", true),
@@ -47,8 +38,8 @@ export async function loadEngineInputs(
         .from("commitments")
         .select("id, title, start_time, end_time, timezone, source")
         .eq("user_id", userId)
-        .gte("start_time", weekStart.toISOString())
-        .lt("start_time", weekEnd.toISOString()),
+        .lt("start_time", bounds.end.toISOString())
+        .gt("end_time", bounds.start.toISOString()),
     ]);
 
   for (const res of [goalsRes, activitiesRes, constraintsRes, preferencesRes, availabilityRes, commitmentsRes]) {
@@ -122,6 +113,7 @@ export async function loadEngineInputs(
     goalIds: goalIdsByActivity.get(row.id) ?? [],
     fixedStartTime: row.fixed_start_time ? row.fixed_start_time.slice(0, 5) : null,
     oneTimeDate: row.one_time_date,
+    timeOccurrence: row.time_occurrence,
   }));
 
   const toRange = (start: string | null, end: string | null) => (start && end ? { start, end } : null);
@@ -135,35 +127,13 @@ export async function loadEngineInputs(
     maxDailyPlanningMinutes: availabilityRow.max_daily_planning_minutes,
   };
 
-  // Same-day-only defensive filter, mirroring syncGoogleCalendarEvents.ts —
-  // the engine's MinuteRange model has no concept of a commitment spanning
-  // more than one calendar day. Converted using each commitment's own
-  // stored timezone, not the server's local clock — see
-  // instantToLocalDateTime for why that distinction matters.
-  const commitments: CommitmentInput[] = (commitmentsRes.data ?? [])
-    .map((row) => ({
-      id: row.id,
-      title: row.title,
-      source: row.source as CommitmentSource,
-      timezone: row.timezone,
-      start: instantToLocalDateTime(row.start_time, row.timezone),
-      end: instantToLocalDateTime(row.end_time, row.timezone),
-    }))
-    .filter((row) => row.start.date === row.end.date)
-    .map((row) => ({
-      id: row.id,
-      title: row.title,
-      source: row.source,
-      timezone: row.timezone,
-      scheduledDate: row.start.date,
-      startTime: row.start.time,
-      endTime: row.end.time,
-    }));
+  const commitments = (commitmentsRes.data ?? []).map((row) => commitmentInput(row, timezone));
 
   return {
     ok: true,
     input: {
       today,
+      timezone,
       goals,
       activities,
       constraints: constraintsRes.data ?? [],

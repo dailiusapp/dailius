@@ -3,7 +3,8 @@
 import { requireUser } from "@/features/auth/services/requireUser";
 import { createClient } from "@/lib/supabase/server";
 import { generatePlan } from "@/features/planning/services/generatePlan";
-import { localDateTimeToInstant } from "@/features/planning/services/dateUtils";
+import { getUserTimezone } from "@/features/auth/services/getUserTimezone";
+import { LocalTimeError, localDateTimeToInstant } from "@/features/planning/services/dateUtils";
 import type { UpdateCommitmentInput, UpdateCommitmentResult } from "../types";
 
 const MAX_TITLE_LENGTH = 60;
@@ -26,10 +27,7 @@ export async function updateCommitment(input: UpdateCommitmentInput): Promise<Up
   const user = await requireUser();
   const supabase = await createClient();
 
-  // Re-verify source === "Manual" server-side even though the UI never
-  // offers this action for a non-Manual commitment — never trust the
-  // client. Also need the row's own stored timezone (not the user's
-  // current one) to re-encode the picked wall-clock time correctly.
+  // Re-verify ownership/source, and interpret edits in the planning timezone.
   const { data: existing, error: fetchError } = await supabase
     .from("commitments")
     .select("timezone, source")
@@ -47,12 +45,22 @@ export async function updateCommitment(input: UpdateCommitmentInput): Promise<Up
     return { ok: false, message: "This commitment is synced from an external calendar and can't be edited here." };
   }
 
-  const start = localDateTimeToInstant(input.scheduledDate, input.scheduledTime, existing.timezone);
+  if (!Number.isFinite(input.durationMinutes) || input.durationMinutes <= 0) {
+    return { ok: false, message: "Choose a positive duration." };
+  }
+  const timezone = (await getUserTimezone(user.id)) ?? "UTC";
+  let start: Date;
+  try {
+    start = localDateTimeToInstant(input.scheduledDate, input.scheduledTime, timezone, input.timeOccurrence);
+  } catch (error) {
+    if (error instanceof LocalTimeError) return { ok: false, message: error.message, field: "scheduledTime", needsTimeChoice: error.kind === "ambiguous" };
+    throw error;
+  }
   const end = new Date(start.getTime() + input.durationMinutes * 60_000);
 
   const { error } = await supabase
     .from("commitments")
-    .update({ title, start_time: start.toISOString(), end_time: end.toISOString() })
+    .update({ title, start_time: start.toISOString(), end_time: end.toISOString(), timezone })
     .eq("id", input.id)
     .eq("user_id", user.id);
 

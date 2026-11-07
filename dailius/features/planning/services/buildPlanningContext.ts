@@ -59,6 +59,7 @@ export function buildPlanningContext(
       // reference (and so never move) a commitment it can't see an id for.
       id: commitment.source === "Manual" ? commitment.id : null,
       title: commitment.title,
+      endDate: commitment.endDate,
       scheduledDate: commitment.scheduledDate,
       startTime: commitment.startTime,
       endTime: commitment.endTime,

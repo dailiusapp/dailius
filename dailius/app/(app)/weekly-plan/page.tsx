@@ -39,6 +39,7 @@ export default async function WeeklyPlanPage({
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-10 sm:px-8 lg:px-12">
       <h1 className="text-xl font-semibold text-navy">Weekly Plan</h1>
+      <p className="mt-1 text-sm text-gray-500">Times shown in {profile?.timezone ?? "UTC"}.</p>
 
       {!onboardingCompleted ? (
         <div className="mt-6">

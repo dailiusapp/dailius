@@ -1,6 +1,9 @@
 # Dailius codebase guide
 
-Repository review: 2026-11-06, based on commit `5db481f`.
+Original repository review: 2026-11-06, based on commit `5db481f`.
+Updated after the 2026-11-07 atomic-write and time-rule work.
+Read `session-handoff.md` for exact commit, migration, and deployment status;
+task #2 deployment confirmation and live smoke checks are still pending.
 This guide records the implementation inspected during the Claude-to-Codex handoff.
 Update it when the architecture or feature status changes. This is an orientation
 review, not a complete security audit or live deployment verification.
@@ -157,7 +160,8 @@ The loop limit is a constant of 3. Usage records count attempts in rolling
 
 ## Known limitations and review findings
 
-These are observations to guide future work, not fixes made by this handoff.
+This section combines current limitations with implementation updates; consult
+`session-handoff.md` to distinguish deployed changes from local work.
 
 - Replan acceptance, weekly plan replacement, onboarding completion, and Google
   Calendar replacement now each use a transactional RPC. Onboarding completion
@@ -179,23 +183,30 @@ These are observations to guide future work, not fixes made by this handoff.
 - Exercise detection uses a small name allowlist. Protected periods map known
   labels to fixed clock ranges; unknown labels such as Personal Time do not
   reserve time. Recovery is a balancing heuristic, not an explicit spacing rule.
-- Exact-time generation intentionally bypasses the exercise cutoff, whereas
-  `planningValidator.ts` applies the cutoff to exercise blocks. These paths need
-  reconciliation if changing exact-time or replanning behavior.
-- The loader documents server-timezone week-boundary query gaps. Commitments use
-  their stored timezone; review interactions with the user's profile timezone
-  before extending cross-zone scheduling.
+- Explicit activity times now override the exercise cutoff consistently in
+  generation and validation. Profile timezone/UTC fallback, elapsed durations,
+  repeated-time preferences, and overnight calendar occupancy are shared across
+  paths; see `docs/planning-time-rules.md` for decisions and rollout.
+- Calendar reads, sync bounds, display, and conflict inputs now use the profile
+  timezone, with interval-overlap queries that include events starting before
+  the week. Missing timezone falls back to UTC; lookup errors are propagated.
 - Calendar sync imports the current week of the primary Google calendar,
-  skips all-day and multi-day events, does delete-and-replace, and does not
+  skips all-day events, retains timed multi-day events, replaces overlapping
+  imports atomically, and does not
   process pagination. Imported events cannot be moved back to Google.
 - Account deletion records a request; it does not delete the auth user or data.
 - Analytics, billing, and broader calendar/fitness integrations remain unbuilt.
 
 ## Verification baseline
 
-The existing Vitest suite passed on this checkout: 7 files, 56 tests.
-`npm run lint` and `npx tsc --noEmit` also passed. Coverage
-includes the engine, fixed-time conflicts, operation application, output parsing,
-schedule validation, retry loop, and intent classification. It is not end-to-end
-coverage of authentication, database writes, Google OAuth, or live OpenAI calls.
-A production build and live integrations were not exercised during this review.
+Latest local validation (2026-11-07): 102 tests across 15 Vitest files passed,
+plus ESLint and TypeScript checking. Disposable PostgreSQL 17 tests applied all
+migrations and passed rollback, ownership/RLS, concurrent onboarding/generation,
+DST occurrence persistence, locked endpoint carryover, and overnight import
+replacement checks. Targeted time/query/calendar tests also passed under a
+non-UTC server timezone (Pacific/Honolulu).
+
+The original review baseline was 56 tests across 7 files. A production build,
+browser smoke tests, live Google/OpenAI calls, and direct hosted database
+verification were not performed for the current changes. See
+`session-handoff.md` for the stopping point and outstanding staging validation.

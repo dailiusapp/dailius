@@ -21,7 +21,7 @@ export function CommitmentRow({ commitment }: { commitment: CommitmentBlock }) {
             <div>
               <p className="font-medium text-gray-700">{commitment.title}</p>
               <p className="text-gray-500">
-                {formatClockTime(commitment.startTime)}–{formatClockTime(commitment.endTime)}
+                {commitment.timeRangeLabel ?? `${formatClockTime(commitment.startTime)}–${formatClockTime(commitment.endTime)}`}
               </p>
             </div>
           </div>

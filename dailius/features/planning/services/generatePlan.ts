@@ -8,11 +8,12 @@ import { syncGoogleCalendarEvents } from "@/features/calendar/services/syncGoogl
 import { generateWeeklySchedule, type LockedBlock } from "./engine";
 import { getWeekStart, toISODate } from "./dateUtils";
 import { loadEngineInputs } from "./loadEngineInputs";
+import { resolveScheduleTimes, type TimeChoices } from "./scheduleTimes";
 import type { GeneratePlanResult } from "../types";
 
 const GENERIC_ERROR_MESSAGE = "Something went wrong generating your plan. Please try again.";
 
-export async function generatePlan(): Promise<GeneratePlanResult> {
+export async function generatePlan(timeChoices: TimeChoices = {}): Promise<GeneratePlanResult> {
   const user = await requireUser();
   const supabase = await createClient();
 
@@ -57,11 +58,13 @@ export async function generatePlan(): Promise<GeneratePlanResult> {
     start_time: string;
     end_time: string;
     original_scheduled_date: string | null;
+    start_instant: string | null;
+    end_instant: string | null;
   }[] = [];
   if (currentPlanRow) {
     const { data, error: lockedError } = await supabase
       .from("scheduled_blocks")
-      .select("id, activity_id, scheduled_date, start_time, end_time, original_scheduled_date")
+      .select("id, activity_id, scheduled_date, start_time, end_time, original_scheduled_date, start_instant, end_instant")
       .eq("weekly_plan_id", currentPlanRow.id)
       .eq("locked", true);
 
@@ -78,16 +81,21 @@ export async function generatePlan(): Promise<GeneratePlanResult> {
     startTime: row.start_time.slice(0, 5),
     endTime: row.end_time.slice(0, 5),
     originalScheduledDate: row.original_scheduled_date,
+    startInstant: row.start_instant,
+    endInstant: row.end_instant,
   }));
 
+  loaded.input.activities = loaded.input.activities.map((activity) => ({ ...activity, timeOccurrence: timeChoices[activity.id] ?? activity.timeOccurrence }));
   const result = generateWeeklySchedule(loaded.input, lockedBlocks);
+  const times = resolveScheduleTimes(result.blocks, loaded.input, timeChoices);
+  if (!times.ok) return times;
 
   if (result.unplacedCount > 0) {
     console.error(`generatePlan: ${result.unplacedCount} occurrence(s) could not be placed for user ${user.id}`);
   }
 
   const unplacedFixedTimeWarnings = result.unplacedFixedTimeActivities.map(
-    (activity) => `"${activity.activityName}" couldn't be scheduled this week — its exact time is no longer free.`,
+    (activity) => `"${activity.activityName}" couldn't be scheduled this week — its exact time is unavailable or does not exist because the clocks change.`,
   );
 
   const { data: planId, error: persistError } = await supabase.rpc("replace_weekly_plan", {
@@ -101,6 +109,9 @@ export async function generatePlan(): Promise<GeneratePlanResult> {
       start_time: block.startTime,
       end_time: block.endTime,
       rationale: block.rationale,
+      time_occurrence: block.timeOccurrence ?? null,
+      start_instant: block.startInstant ?? null,
+      end_instant: block.endInstant ?? null,
     })),
   });
   if (persistError || !planId) {

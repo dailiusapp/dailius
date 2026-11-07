@@ -8,6 +8,7 @@ export type CommitmentForEdit = {
   scheduledDate: string; // "YYYY-MM-DD"
   scheduledTime: string; // "HH:MM"
   durationMinutes: number;
+  timeOccurrence?: "earlier" | "later" | null;
   source: CommitmentSource;
 };
 
@@ -21,10 +22,11 @@ export type UpdateCommitmentInput = {
   scheduledDate: string;
   scheduledTime: string;
   durationMinutes: number;
+  timeOccurrence?: "earlier" | "later" | null;
 };
 
 export type UpdateCommitmentResult =
   | { ok: true }
-  | { ok: false; message: string; field?: CommitmentFieldErrors };
+  | { ok: false; message: string; field?: CommitmentFieldErrors; needsTimeChoice?: boolean };
 
 export type DeleteCommitmentResult = { ok: true } | { ok: false; message: string };

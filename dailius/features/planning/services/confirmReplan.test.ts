@@ -33,7 +33,7 @@ describe("confirmReplan", () => {
     // No .from(): any accidental direct table write fails these tests.
     mocks.createClient.mockResolvedValue({ rpc: mocks.rpc });
     mocks.getCurrentPlan.mockResolvedValue({ id: "plan", blocks: [] });
-    mocks.loadEngineInputs.mockResolvedValue({ ok: true, input: { commitments: [{ id: "commitment", timezone: "America/Vancouver" }] } });
+    mocks.loadEngineInputs.mockResolvedValue({ ok: true, input: { activities: [], timezone: "America/Vancouver", commitments: [{ id: "commitment", timezone: "America/Vancouver" }] } });
     mocks.apply.mockReturnValue(applied);
     mocks.validate.mockReturnValue({ valid: true });
     mocks.rpc.mockResolvedValue({ error: null });
@@ -44,7 +44,7 @@ describe("confirmReplan", () => {
     expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("confirm_replan", {
       p_plan_id: "plan",
       p_priority_changes: [{ goal_id: "goal", priority: "high" }],
-      p_new_blocks: [{ activity_id: "activity", scheduled_date: "2026-08-13", start_time: "09:00", end_time: "09:30", rationale: "Moved", original_scheduled_date: "2026-08-12" }],
+      p_new_blocks: [{ activity_id: "activity", scheduled_date: "2026-08-13", start_time: "09:00", end_time: "09:30", rationale: "Moved", original_scheduled_date: "2026-08-12", time_occurrence: null, start_instant: null, end_instant: null }],
       p_commitment_moves: [{ id: "commitment", start_time: "2026-08-14T17:00:00.000Z", end_time: "2026-08-14T18:00:00.000Z" }],
       p_removed_block_ids: ["old-block"],
     });

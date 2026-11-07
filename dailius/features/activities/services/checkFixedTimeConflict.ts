@@ -1,6 +1,7 @@
 "use server";
 
 import { loadEngineInputs } from "@/features/planning/services/loadEngineInputs";
+import { resolveScheduleTimes } from "@/features/planning/services/scheduleTimes";
 import { generateWeeklySchedule } from "@/features/planning/services/engine";
 import { addDays, getWeekStart, toISODate } from "@/features/planning/services/dateUtils";
 import type { ActivityInput } from "@/features/planning/types";
@@ -47,6 +48,8 @@ export async function checkFixedTimeConflict(userId: string, candidate: Activity
     : [...loaded.input.activities, candidate];
 
   const result = generateWeeklySchedule({ ...loaded.input, activities });
+  const timeResult = resolveScheduleTimes(result.blocks.filter((block) => block.activityId === candidate.id), { ...loaded.input, activities });
+  if (!timeResult.ok) return { ok: false, message: timeResult.message };
   const placedAtExactTime = result.blocks.some(
     (block) => block.activityId === candidate.id && block.startTime === candidate.fixedStartTime,
   );
@@ -54,7 +57,7 @@ export async function checkFixedTimeConflict(userId: string, candidate: Activity
   if (!placedAtExactTime) {
     return {
       ok: false,
-      message: "That time conflicts with an existing commitment or another fixed-time activity.",
+      message: "That time does not exist on the selected day, or conflicts with an existing commitment or another fixed-time activity.",
     };
   }
 

@@ -3,6 +3,9 @@
 import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveOnboardingProgress, completeOnboarding } from "../services/actions";
+import { TimeOccurrenceChoices } from "@/features/planning/components/TimeOccurrenceChoices";
+import type { ScheduleTimeChoice } from "@/features/planning/types";
+import type { TimeChoices } from "@/features/planning/services/scheduleTimes";
 import { generatePlan } from "@/features/planning/services/generatePlan";
 import { TOTAL_STEPS, type OnboardingData } from "../types";
 import { OnboardingProgress } from "./OnboardingProgress";
@@ -38,6 +41,8 @@ export function OnboardingWizard({
   const router = useRouter();
   const [step, setStep] = useState(initialStep);
   const [data, setData] = useState<OnboardingData>(initialData);
+  const [requests, setRequests] = useState<ScheduleTimeChoice[]>([]);
+  const [choices, setChoices] = useState<TimeChoices>({});
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -68,8 +73,9 @@ export function OnboardingWizard({
     setStep(GENERATING);
     try {
       await completeOnboarding(data);
-      const result = await generatePlan();
+      const result = await generatePlan(choices);
       if (!result.ok) {
+        setRequests(result.timeChoices ?? []);
         throw new Error(result.message);
       }
       setStep(COMPLETE);
@@ -129,7 +135,7 @@ export function OnboardingWizard({
       ) : null}
 
       {step === REVIEW ? (
-        <ReviewStep data={data} error={generationError} onBack={goBack} onGenerate={handleGenerate} />
+        <><TimeOccurrenceChoices requests={requests} choices={choices} onChange={setChoices} /><ReviewStep data={data} error={generationError} onBack={goBack} onGenerate={handleGenerate} /></>
       ) : null}
 
       {step === GENERATING ? <GeneratingScreen /> : null}

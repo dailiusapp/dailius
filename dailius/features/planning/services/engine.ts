@@ -1,3 +1,6 @@
+import { occupiedSegments } from "./elapsedTime";
+import { instantToLocalDateTime, localDayStart, possibleInstants, type TimeOccurrence } from "./dateUtils";
+import { commitmentSegments } from "./commitmentSegments";
 import type {
   ActivityInput,
   AvailabilityInput,
@@ -44,10 +47,33 @@ export const FREQUENCY_TO_WEEKLY_COUNT: Record<string, number> = {
 const DEFAULT_ACTIVITY_DURATION_MINUTES = 30;
 
 type MinuteRange = { start: number; end: number };
+type ElapsedSlot = MinuteRange & { startTime: string; endTime: string; startInstant: string; endInstant: string; timeOccurrence?: TimeOccurrence | null };
+
+function elapsedSlot(day: DayPlan, start: number, duration: number, occurrence?: TimeOccurrence | null): ElapsedSlot | null {
+  const startTime = minutesToTime(start);
+  const candidates = possibleInstants(day.date, startTime, day.timezone);
+  if (!candidates.length) return null;
+  // With no preference this is a temporary placement only. The service
+  // returns a choice request and will not persist it until the user chooses.
+  const instant = occurrence === "later" ? candidates[candidates.length - 1] : candidates[0];
+  const endInstant = new Date(instant.getTime() + duration * 60_000).toISOString();
+  const endLocal = instantToLocalDateTime(endInstant, day.timezone);
+  const segments = occupiedSegments(instant.toISOString(), endInstant, day.timezone);
+  if (segments.length !== 1 || segments[0].scheduledDate !== day.date) return null;
+  const endTime = endLocal.date !== day.date ? "24:00" : endLocal.time;
+  return { start: timeToMinutes(segments[0].startTime), end: timeToMinutes(segments[0].endTime),
+    startTime, endTime, startInstant: instant.toISOString(), endInstant,
+    timeOccurrence: candidates.length > 1 ? occurrence : null };
+}
 
 type ProtectedRange = { label: string; start: number; end: number };
 
 type DayPlan = {
+  timezone: string;
+  dayStart: number;
+  dayEnd: number;
+  hasRepeatedMinutes: boolean;
+  busyInstants: { start: number; end: number }[];
   date: string;
   dayLabel: string;
   isWeekend: boolean;
@@ -138,7 +164,13 @@ export function computeFreeBlocksForWeek(input: EngineInput): DayPlan[] {
       }
     }
 
+    const timezone = input.timezone ?? "UTC";
+    const dayStart = localDayStart(iso, timezone).getTime();
+    const dayEnd = localDayStart(toISODate(addDays(date, 1)), timezone).getTime();
     days.push({
+      timezone, dayStart, dayEnd,
+      hasRepeatedMinutes: dayEnd - dayStart > 24 * 3_600_000,
+      busyInstants: [],
       date: iso,
       dayLabel,
       isWeekend: weekend,
@@ -153,6 +185,15 @@ export function computeFreeBlocksForWeek(input: EngineInput): DayPlan[] {
   return days;
 }
 
+export function instantRangeIsFree(day: DayPlan, start: string, end: string): boolean {
+  return !day.busyInstants.some((busy) => busy.start < Date.parse(end) && Date.parse(start) < busy.end);
+}
+
+function consumeSlot(day: DayPlan, slot: ElapsedSlot) {
+  if (!day.hasRepeatedMinutes) day.freeRanges = subtractRange(day.freeRanges, slot);
+  day.busyInstants.push({ start: Date.parse(slot.startInstant), end: Date.parse(slot.endInstant) });
+}
+
 // Seeds a `days` array (from `computeFreeBlocksForWeek`) with time already
 // occupied by blocks the caller already knows about — used by targeted
 // single-activity replanning, where the week isn't blank the way it is for
@@ -160,15 +201,26 @@ export function computeFreeBlocksForWeek(input: EngineInput): DayPlan[] {
 // `placeOccurrence`.
 export function seedExistingBookings(
   days: DayPlan[],
-  bookings: { scheduledDate: string; startTime: string; endTime: string; isExercise: boolean }[],
+  bookings: { scheduledDate: string; startTime: string; endTime: string; isExercise: boolean; startInstant?: string | null; endInstant?: string | null }[],
 ): void {
   for (const booking of bookings) {
     const day = days.find((d) => d.date === booking.scheduledDate);
     if (!day) continue;
 
     const range = { start: timeToMinutes(booking.startTime), end: timeToMinutes(booking.endTime) };
-    day.freeRanges = subtractRange(day.freeRanges, range);
-    day.plannedMinutes += range.end - range.start;
+    if (booking.startInstant && booking.endInstant) {
+      const start = Date.parse(booking.startInstant);
+      const end = Date.parse(booking.endInstant);
+      day.busyInstants.push({ start, end });
+      // On a fold day the two occurrences share the same wall minutes.
+      // Absolute overlap checks distinguish them; subtracting wall ranges
+      // would incorrectly make a busy earlier occurrence block the later one.
+      if (!day.hasRepeatedMinutes) day.freeRanges = subtractRange(day.freeRanges, range);
+      day.plannedMinutes += Math.max(0, Math.min(end, day.dayEnd) - Math.max(start, day.dayStart)) / 60_000;
+    } else {
+      day.freeRanges = subtractRange(day.freeRanges, range);
+      day.plannedMinutes += range.end - range.start;
+    }
     if (booking.isExercise) day.hasExerciseBlock = true;
   }
 }
@@ -316,7 +368,8 @@ function findSlotInDay(
   isExercise: boolean,
   exerciseCutoffMinutes: number | null,
   maxDailyMinutes: number | null,
-): { slot: MinuteRange; matchedPreferredTime: boolean } | null {
+  occurrence?: TimeOccurrence | null,
+): { slot: ElapsedSlot; matchedPreferredTime: boolean } | null {
   if (day.isPast) return null;
   if (maxDailyMinutes !== null && day.plannedMinutes + durationMinutes > maxDailyMinutes) return null;
 
@@ -326,10 +379,14 @@ function findSlotInDay(
 
   for (const range of orderedRanges) {
     const effectiveEnd = cutoff !== null ? Math.min(range.end, cutoff) : range.end;
-    if (effectiveEnd - range.start >= durationMinutes) {
-      const slot = { start: range.start, end: range.start + durationMinutes };
-      const matchedPreferredTime = !bounds || (slot.start < bounds.end && slot.end > bounds.start);
-      return { slot, matchedPreferredTime };
+    for (let start = range.start; start < effectiveEnd; start += 15) {
+      for (const choice of occurrence ? [occurrence] : ["earlier", "later"] as const) {
+        const slot = elapsedSlot(day, start, durationMinutes, choice);
+        if (!slot || slot.start < range.start || slot.end > effectiveEnd || !instantRangeIsFree(day, slot.startInstant, slot.endInstant)) continue;
+        if (!occurrence) slot.timeOccurrence = null;
+        const matchedPreferredTime = !bounds || (slot.start < bounds.end && slot.end > bounds.start);
+        return { slot, matchedPreferredTime };
+      }
     }
   }
   return null;
@@ -341,14 +398,17 @@ function findSlotInDay(
 // exerciseCutoffMinutes: an explicit time the user set is authoritative,
 // unlike the soft cutoff preference that only governs freely-placed
 // exercise activities.
-function findExactSlotInDay(day: DayPlan, startTime: string, durationMinutes: number, maxDailyMinutes: number | null): MinuteRange | null {
+function findExactSlotInDay(day: DayPlan, startTime: string, durationMinutes: number, maxDailyMinutes: number | null, occurrence?: TimeOccurrence | null): ElapsedSlot | null {
   if (day.isPast) return null;
   if (maxDailyMinutes !== null && day.plannedMinutes + durationMinutes > maxDailyMinutes) return null;
-
-  const start = timeToMinutes(startTime);
-  const slot = { start, end: start + durationMinutes };
-  const fits = day.freeRanges.some((range) => range.start <= slot.start && slot.end <= range.end);
-  return fits ? slot : null;
+  for (const choice of occurrence ? [occurrence] : ["earlier", "later"] as const) {
+    const slot = elapsedSlot(day, timeToMinutes(startTime), durationMinutes, choice);
+    if (slot && instantRangeIsFree(day, slot.startInstant, slot.endInstant) && day.freeRanges.some((range) => range.start <= slot.start && slot.end <= range.end)) {
+      if (!occurrence) slot.timeOccurrence = null;
+      return slot;
+    }
+  }
+  return null;
 }
 
 function findNearbyProtectedLabel(day: DayPlan, slot: MinuteRange): string | null {
@@ -371,10 +431,10 @@ export function placeOccurrence(
 
   if (activity.fixedStartTime) {
     for (const day of candidates) {
-      const slot = findExactSlotInDay(day, activity.fixedStartTime, durationMinutes, maxDailyMinutes);
+      const slot = findExactSlotInDay(day, activity.fixedStartTime, durationMinutes, maxDailyMinutes, activity.timeOccurrence);
       if (!slot) continue;
 
-      day.freeRanges = subtractRange(day.freeRanges, slot);
+      consumeSlot(day, slot);
       day.plannedMinutes += durationMinutes;
       if (isExercise) day.hasExerciseBlock = true;
 
@@ -394,8 +454,11 @@ export function placeOccurrence(
         activityId: activity.id,
         activityName: activity.name,
         scheduledDate: day.date,
-        startTime: minutesToTime(slot.start),
-        endTime: minutesToTime(slot.end),
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        startInstant: slot.startInstant,
+        endInstant: slot.endInstant,
+        timeOccurrence: slot.timeOccurrence,
         rationale,
       };
     }
@@ -418,11 +481,12 @@ export function placeOccurrence(
         isExercise,
         exerciseCutoffMinutes,
         maxDailyMinutes,
+        activity.timeOccurrence,
       );
       if (!found) continue;
       const { slot, matchedPreferredTime } = found;
 
-      day.freeRanges = subtractRange(day.freeRanges, slot);
+      consumeSlot(day, slot);
       day.plannedMinutes += wantedDuration;
       if (isExercise) day.hasExerciseBlock = true;
 
@@ -446,8 +510,11 @@ export function placeOccurrence(
         activityId: activity.id,
         activityName: activity.name,
         scheduledDate: day.date,
-        startTime: minutesToTime(slot.start),
-        endTime: minutesToTime(slot.end),
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        startInstant: slot.startInstant,
+        endInstant: slot.endInstant,
+        timeOccurrence: slot.timeOccurrence,
         rationale,
       };
     }
@@ -493,6 +560,7 @@ export function placeOccurrenceCandidates(
         isExercise,
         exerciseCutoffMinutes,
         maxDailyMinutes,
+        activity.timeOccurrence,
       );
       if (!found) continue;
       const { slot, matchedPreferredTime } = found;
@@ -517,8 +585,11 @@ export function placeOccurrenceCandidates(
         activityId: activity.id,
         activityName: activity.name,
         scheduledDate: day.date,
-        startTime: minutesToTime(slot.start),
-        endTime: minutesToTime(slot.end),
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        startInstant: slot.startInstant,
+        endInstant: slot.endInstant,
+        timeOccurrence: slot.timeOccurrence,
         rationale,
       });
       break;
@@ -570,29 +641,32 @@ export type LockedBlock = {
   startTime: string;
   endTime: string;
   originalScheduledDate?: string | null;
+  startInstant?: string | null;
+  endInstant?: string | null;
 };
 
 export function generateWeeklySchedule(input: EngineInput, lockedBlocks: LockedBlock[] = []): EngineResult {
   const days = computeFreeBlocksForWeek(input);
   seedExistingBookings(
     days,
-    input.commitments.map((commitment) => ({
+    input.commitments.flatMap((commitment) => commitmentSegments(commitment, toISODate(getWeekStart(input.today)))).map((commitment) => ({
       scheduledDate: commitment.scheduledDate,
       startTime: commitment.startTime,
       endTime: commitment.endTime,
+      startInstant: commitment.startInstant,
+      endInstant: commitment.endInstant,
       isExercise: false,
     })),
   );
   const activitiesById = new Map(input.activities.map((activity) => [activity.id, activity]));
-  seedExistingBookings(
-    days,
-    lockedBlocks.map((block) => ({
-      scheduledDate: block.scheduledDate,
-      startTime: block.startTime,
-      endTime: block.endTime,
+  seedExistingBookings(days, lockedBlocks.flatMap((block) => {
+    const ranges = block.startInstant && block.endInstant
+      ? occupiedSegments(block.startInstant, block.endInstant, input.timezone ?? "UTC")
+      : [block];
+    return ranges.map((range) => ({ ...range, startInstant: block.startInstant, endInstant: block.endInstant,
       isExercise: EXERCISE_ACTIVITY_NAMES.has((activitiesById.get(block.activityId)?.name ?? "").trim().toLowerCase()),
-    })),
-  );
+    }));
+  }));
 
   const lockedCountByActivity = new Map<string, number>();
   const vacatedDaysByActivity = new Map<string, Set<string>>();

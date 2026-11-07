@@ -2,7 +2,8 @@
 
 import { requireUser } from "@/features/auth/services/requireUser";
 import { createClient } from "@/lib/supabase/server";
-import { instantToLocalDateTime } from "@/features/planning/services/dateUtils";
+import { getUserTimezone } from "@/features/auth/services/getUserTimezone";
+import { instantToLocalDateTime, possibleInstants } from "@/features/planning/services/dateUtils";
 import type { CommitmentSource } from "@/features/planning/types";
 import type { GetCommitmentForEditResult } from "../types";
 
@@ -24,7 +25,9 @@ export async function getCommitmentForEdit(commitmentId: string): Promise<GetCom
     return { ok: false, message: "That commitment couldn't be found." };
   }
 
-  const start = instantToLocalDateTime(commitment.start_time, commitment.timezone);
+  const timezone = (await getUserTimezone(user.id)) ?? "UTC";
+  const start = instantToLocalDateTime(commitment.start_time, timezone);
+  const candidates = possibleInstants(start.date, start.time, timezone);
   const durationMinutes = Math.round(
     (new Date(commitment.end_time).getTime() - new Date(commitment.start_time).getTime()) / 60_000,
   );
@@ -38,6 +41,7 @@ export async function getCommitmentForEdit(commitmentId: string): Promise<GetCom
       scheduledTime: start.time,
       durationMinutes,
       source: commitment.source as CommitmentSource,
+      timeOccurrence: candidates.length > 1 ? (Date.parse(commitment.start_time) === candidates[0].getTime() ? "earlier" : "later") : null,
     },
   };
 }

@@ -49,9 +49,8 @@ export function minutesToTime(minutes: number): string {
 // Extracts "HH:MM" from a Date's local hours/minutes — used to turn a
 // commitment's timestamptz start/end into the same clock-time
 // representation the engine already uses everywhere else. Server-local
-// time; callers wanting the user's own local time should go through
-// `currentTimeInTimezone` instead, which falls back to this when no
-// timezone has been captured yet.
+// time; planning callers must use `currentTimeInTimezone`, with UTC as
+// the explicit fallback when no profile timezone has been captured.
 export function timeFromDate(date: Date): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
@@ -62,18 +61,23 @@ export function timeFromDate(date: Date): string {
 // `timeFromDate` above is server-local and wrong for this — a 5pm Pacific
 // event stored as a UTC instant lands on the wrong calendar day entirely
 // when read back with server-local getters on a UTC server. `timeZone`
-// should be the zone the instant was originally expressed in (Google
-// Calendar returns this per-event as `start.timeZone`).
+// is the user's planning timezone; the original event zone is metadata.
+const zoneFormatters = new Map<string, Intl.DateTimeFormat>();
+
 export function instantToLocalDateTime(isoInstant: string, timeZone: string): { date: string; time: string } {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  let formatter = zoneFormatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    zoneFormatters.set(timeZone, formatter);
+  }
   const parts = formatter.formatToParts(new Date(isoInstant));
   const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
   // Intl can format midnight as "24:00" with hour12: false — normalize to "00".
@@ -84,64 +88,97 @@ export function instantToLocalDateTime(isoInstant: string, timeZone: string): { 
   };
 }
 
-// Inverse of `instantToLocalDateTime` — Intl only exposes zone-aware
-// *formatting*, not zone-aware *parsing*, so there's no direct way to turn a
-// wall-clock date+time into the UTC instant that would display as that time
-// in `timeZone`. Instead: assume the wall time is UTC, ask Intl what that
-// guess actually looks like in `timeZone`, and shift by the difference. A
-// single pass is exact here because commitments are always in the near
-// future, so `guess` and the true instant fall on the same side of any DST
-// transition for `timeZone`.
-function getTimezoneOffsetMinutes(timeZone: string, date: Date): number {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-  const parts = formatter.formatToParts(date);
-  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? 0);
-  const asUTC = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
-  return (asUTC - date.getTime()) / 60_000;
+export type TimeOccurrence = "earlier" | "later";
+
+export class LocalTimeError extends Error {
+  constructor(public readonly kind: "nonexistent" | "ambiguous", date: string, time: string, timezone: string) {
+    super(kind === "nonexistent"
+      ? `${time} on ${date} does not exist in ${timezone} because the clocks change. Pick another time.`
+      : `${time} on ${date} occurs twice in ${timezone}. Choose the earlier or later occurrence.`);
+  }
 }
 
-// Converts a local "YYYY-MM-DD" date + "HH:MM" time, as picked by a user in
-// `timeZone`, into the UTC instant it represents — e.g. for storing a
-// manually-added commitment's `start_time`/`end_time` timestamptz.
-export function localDateTimeToInstant(date: string, time: string, timeZone: string): Date {
+function getTimezoneOffsetMinutes(timeZone: string, date: Date): number {
+  const local = instantToLocalDateTime(date.toISOString(), timeZone);
+  const [year, month, day] = local.date.split("-").map(Number);
+  const [hour, minute] = local.time.split(":").map(Number);
+  return (Date.UTC(year, month - 1, day, hour, minute) - date.getTime()) / 60_000;
+}
+
+// Try the offsets on both sides of any nearby transition, then round-trip
+// every candidate. A gap has no candidate; a fold has two. Never normalize
+// a nonexistent time or silently pick one occurrence of a repeated time.
+const offsetCache = new Map<string, number[]>();
+
+export function possibleInstants(date: string, time: string, timezone: string): Date[] {
   const [year, month, day] = date.split("-").map(Number);
   const [hour, minute] = time.split(":").map(Number);
-  const naiveUtcMs = Date.UTC(year, month - 1, day, hour, minute, 0);
-  const offsetMinutes = getTimezoneOffsetMinutes(timeZone, new Date(naiveUtcMs));
-  return new Date(naiveUtcMs - offsetMinutes * 60_000);
+  const naive = Date.UTC(year, month - 1, day, hour, minute);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)
+    || !Number.isFinite(naive) || new Date(naive).toISOString().slice(0, 10) !== date) {
+    return [];
+  }
+  const cacheKey = `${date}:${timezone}`;
+  let offsets = offsetCache.get(cacheKey);
+  if (!offsets) {
+    const noon = Date.UTC(year, month - 1, day, 12);
+    offsets = [...new Set([-48, -24, 0, 24, 48].map((hours) =>
+      getTimezoneOffsetMinutes(timezone, new Date(noon + hours * 3_600_000))))];
+    if (offsetCache.size > 512) offsetCache.clear();
+    offsetCache.set(cacheKey, offsets);
+  }
+  return offsets.map((offset) => new Date(naive - offset * 60_000))
+    .filter((candidate) => {
+      const local = instantToLocalDateTime(candidate.toISOString(), timezone);
+      return local.date === date && local.time === time;
+    }).sort((a, b) => a.getTime() - b.getTime());
+}
+
+export function localDateTimeToInstant(date: string, time: string, timezone: string, occurrence?: TimeOccurrence | null): Date {
+  const candidates = possibleInstants(date, time, timezone);
+  if (!candidates.length) throw new LocalTimeError("nonexistent", date, time, timezone);
+  if (candidates.length > 1 && occurrence !== "earlier" && occurrence !== "later") {
+    throw new LocalTimeError("ambiguous", date, time, timezone);
+  }
+  return occurrence === "later" ? candidates[candidates.length - 1] : candidates[0];
+}
+
+// Calendar boundaries use the first instant of the local day. Midnight can
+// itself be skipped or repeated in some zones; this is a boundary, not an
+// ambiguous user appointment, so use the first existing minute of that day.
+export function localDayStart(date: string, timezone: string): Date {
+  for (let minute = 0; minute < 1440; minute++) {
+    const candidates = possibleInstants(date, minutesToTime(minute), timezone);
+    if (candidates.length) return candidates[0];
+  }
+  throw new Error(`The date ${date} does not exist in ${timezone}.`);
+}
+
+export function weekBounds(weekStart: string, timezone: string) {
+  const weekEnd = toISODate(addDays(parseISODate(weekStart), 7));
+  return { start: localDayStart(weekStart, timezone), end: localDayStart(weekEnd, timezone) };
 }
 
 // Returns a Date whose local-getter-read calendar date (year/month/day)
 // matches "today" in the given IANA timezone — a drop-in replacement for
 // `new Date()` at every call site that only ever reads the date portion
 // (toISODate, getWeekStart, EngineInput.today) but previously got the
-// server's own timezone (UTC) instead of the user's. Falls back to the
-// server's raw clock when no timezone has been captured yet for this user.
+// server's own timezone instead of the user's. Falls back explicitly to
+// UTC when no timezone has been captured yet for this user.
 export function todayInTimezone(timezone: string | null): Date {
-  if (!timezone) return new Date();
-  const { date } = instantToLocalDateTime(new Date().toISOString(), timezone);
+  const { date } = instantToLocalDateTime(new Date().toISOString(), timezone ?? "UTC");
   return parseISODate(date);
 }
 
 // Same idea as `todayInTimezone`, for call sites that need the current
 // wall-clock time ("HH:MM") rather than the date.
 export function currentTimeInTimezone(timezone: string | null): string {
-  if (!timezone) return timeFromDate(new Date());
-  return instantToLocalDateTime(new Date().toISOString(), timezone).time;
+  return instantToLocalDateTime(new Date().toISOString(), timezone ?? "UTC").time;
 }
 
 export function formatClockTime(time: string): string {
   const [hourStr, minuteStr] = time.split(":");
-  const hour = Number(hourStr);
+  const hour = Number(hourStr) % 24;
   const period = hour >= 12 ? "PM" : "AM";
   const displayHour = hour % 12 === 0 ? 12 : hour % 12;
   return `${displayHour}:${minuteStr} ${period}`;

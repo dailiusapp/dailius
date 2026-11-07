@@ -6,7 +6,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Dailius project context
 
-Read `docs/codebase-guide.md` for the current implementation map, documentation
+Read `docs/session-handoff.md` first for the latest work, confirmed decisions,
+validation, deployment state, and resume point. Then read `docs/codebase-guide.md`
+for the current implementation map, documentation
 priorities, development commands, and known gaps. `CLAUDE.md` contains useful
 product principles but its landing-page-only implementation description is stale.
 

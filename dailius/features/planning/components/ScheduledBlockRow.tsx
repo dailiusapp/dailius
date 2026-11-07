@@ -27,6 +27,8 @@ export function ScheduledBlockRow({
             <p className="font-medium text-navy">{block.activityName}</p>
             <p className="text-gray-500">
               {formatClockTime(block.startTime)}–{formatClockTime(block.endTime)}
+              {block.timeOccurrence ? ` · ${block.timeOccurrence} start occurrence` : ""}
+              {block.startInstant && block.endInstant ? ` · ${(Date.parse(block.endInstant) - Date.parse(block.startInstant)) / 60_000} minutes` : ""}
             </p>
           </div>
           <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", STATUS_STYLES[block.status])}>

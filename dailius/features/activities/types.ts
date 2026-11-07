@@ -1,3 +1,4 @@
+import type { ScheduleTimeChoice } from "@/features/planning/types";
 import type { Goal } from "@/features/goals/types";
 
 export type FrequencyMode = "days" | "timesPerWeek" | "oneTime";
@@ -17,6 +18,7 @@ export type CreateActivityInput = {
   // not at all. When null, placement falls back to preferredTimeOfDay as
   // before.
   fixedStartTime: string | null;
+  timeOccurrence?: "earlier" | "later" | null;
 };
 
 export type ActivityFieldErrors =
@@ -27,7 +29,7 @@ export type ActivityFieldErrors =
   | "fixedStartTime";
 
 export type CreateActivityResult =
-  | { ok: true; activityId: string }
+  | { ok: true; activityId: string; timeChoices?: ScheduleTimeChoice[] }
   | { ok: false; message: string; field?: ActivityFieldErrors };
 
 // "oneTime" is now a real activities row (see createActivity.ts) — no
@@ -46,6 +48,7 @@ export type ActivityForEdit = {
   goalIds: string[];
   oneTimeDate: string | null;
   fixedStartTime: string | null;
+  timeOccurrence?: "earlier" | "later" | null;
 };
 
 export type GetActivityForEditResult =
@@ -68,10 +71,11 @@ export type UpdateActivityInput = {
   goalIds: string[];
   oneTimeDate: string | null;
   fixedStartTime: string | null;
+  timeOccurrence?: "earlier" | "later" | null;
 };
 
 export type UpdateActivityResult =
-  | { ok: true }
+  | { ok: true; timeChoices?: ScheduleTimeChoice[] }
   | { ok: false; message: string; field?: ActivityFieldErrors };
 
 export type DeleteActivityResult = { ok: true } | { ok: false; message: string };

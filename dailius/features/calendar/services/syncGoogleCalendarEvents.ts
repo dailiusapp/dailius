@@ -1,7 +1,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { addDays, getWeekStart, instantToLocalDateTime } from "@/features/planning/services/dateUtils";
+import { getWeekStart, toISODate, todayInTimezone, weekBounds } from "@/features/planning/services/dateUtils";
+import { getUserTimezone } from "@/features/auth/services/getUserTimezone";
 import { getValidAccessToken } from "./getValidAccessToken";
 
 const CALENDAR_EVENTS_ENDPOINT = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
@@ -32,8 +33,8 @@ export async function syncGoogleCalendarEvents(userId: string): Promise<SyncGoog
     return { ok: false, message: "Google Calendar is not connected." };
   }
 
-  const weekStart = getWeekStart(new Date());
-  const weekEnd = addDays(weekStart, 7);
+  const timezone = (await getUserTimezone(userId)) ?? "UTC";
+  const { start: weekStart, end: weekEnd } = weekBounds(toISODate(getWeekStart(todayInTimezone(timezone))), timezone);
 
   try {
     const url = new URL(CALENDAR_EVENTS_ENDPOINT);
@@ -51,12 +52,8 @@ export async function syncGoogleCalendarEvents(userId: string): Promise<SyncGoog
       throw new Error(data.error?.message ?? "Failed to fetch Google Calendar events");
     }
 
-    // All-day events (`date` instead of `dateTime`) and events spanning
-    // more than one calendar day (in the event's own timezone, not the
-    // server's) don't fit the engine's single-day MinuteRange model —
-    // skipped here as a documented limitation, same as other engine edge
-    // cases, rather than teaching the engine multi-day ranges for what's
-    // expected to be a rare case.
+    // All-day events remain excluded. Timed overnight/multi-day events
+    // retain their real instants and are split into daily planning segments.
     const rows = (data.items ?? [])
       .filter((event) => event.status !== "cancelled")
       .filter((event) => event.start?.dateTime && event.end?.dateTime)
@@ -65,15 +62,10 @@ export async function syncGoogleCalendarEvents(userId: string): Promise<SyncGoog
         title: event.summary?.trim() || "Busy",
         start_time: event.start!.dateTime!,
         end_time: event.end!.dateTime!,
-        timezone: event.start!.timeZone || event.end!.timeZone || "UTC",
+        timezone: event.start!.timeZone || event.end!.timeZone || timezone,
         source: SOURCE,
         external_event_id: event.id,
-      }))
-      .filter(
-        (row) =>
-          instantToLocalDateTime(row.start_time, row.timezone).date ===
-          instantToLocalDateTime(row.end_time, row.timezone).date,
-      );
+      }));
 
     const supabase = await createClient();
 

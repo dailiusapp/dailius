@@ -2,6 +2,8 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { GeneratePlanButton } from "@/features/planning/components/GeneratePlanButton";
+import type { ScheduleTimeChoice } from "@/features/planning/types";
 import { cn } from "@/lib/cn";
 import { updateActivity } from "@/features/activities/services/updateActivity";
 import { deleteActivity } from "@/features/activities/services/deleteActivity";
@@ -50,12 +52,14 @@ export function ActivityEditForm({
   const [flexible, setFlexible] = useState(activity.flexible);
   const [goalIds, setGoalIds] = useState<string[]>(activity.goalIds);
   const [oneTimeDate, setOneTimeDate] = useState<string | null>(activity.oneTimeDate);
+  const [timeOccurrence, setTimeOccurrence] = useState<"earlier" | "later" | null>(activity.timeOccurrence ?? null);
   const [fixedStartTime, setFixedStartTime] = useState<string | null>(activity.fixedStartTime);
   // Kept uncontrolled for the same Safari reason AddActivityForm's date
   // input is — see that file's dateInputRef comment.
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   const [fieldError, setFieldError] = useState<Partial<Record<ActivityFieldErrors, string>>>({});
+  const [pendingTimeChoices, setPendingTimeChoices] = useState<ScheduleTimeChoice[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -121,6 +125,7 @@ export function ActivityEditForm({
       goalIds,
       oneTimeDate: dateValue,
       fixedStartTime,
+      timeOccurrence,
     });
     setIsSaving(false);
 
@@ -133,6 +138,10 @@ export function ActivityEditForm({
       return;
     }
 
+    if (result.timeChoices?.length) {
+      setPendingTimeChoices(result.timeChoices);
+      return;
+    }
     router.refresh();
     onDone();
   }
@@ -162,6 +171,7 @@ export function ActivityEditForm({
         already happened.
       </p>
 
+      {pendingTimeChoices.length ? <GeneratePlanButton label="Finish scheduling" initialTimeChoices={pendingTimeChoices} onGenerated={onDone} /> : null}
       {formError ? (
         <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {formError}
@@ -308,6 +318,8 @@ export function ActivityEditForm({
       </div>
 
       <FixedTimeFields
+        timeOccurrence={timeOccurrence}
+        onOccurrenceChange={setTimeOccurrence}
         idPrefix="activity-edit"
         fixedStartTime={fixedStartTime}
         onChange={setFixedStartTime}
