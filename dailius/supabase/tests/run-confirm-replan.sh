@@ -21,4 +21,7 @@ $$;
 SQL
 cat supabase/migrations/*.sql
 cat supabase/tests/confirm_replan.sql
+cat supabase/tests/atomic_writes.sql
 } | docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1
+
+python3 supabase/tests/concurrent_atomic_writes.py "$container"

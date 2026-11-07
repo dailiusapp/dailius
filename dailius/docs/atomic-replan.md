@@ -48,7 +48,7 @@ function in place. No hosted database was changed during local verification.
 ## Scope
 
 This change makes replan persistence atomic. Weekly generation, onboarding, and
-calendar replacement remain separate follow-up work. It does not add persisted
+calendar replacement are now also transactional; see `docs/atomic-writes.md`. It does not add persisted
 proposal IDs or idempotency for add-only proposals. The plan row lock serializes
 confirmation transactions, but validation still occurs before that transaction;
 concurrent edits to availability, commitments, or unrelated blocks are not covered

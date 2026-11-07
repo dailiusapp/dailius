@@ -90,69 +90,26 @@ export async function generatePlan(): Promise<GeneratePlanResult> {
     (activity) => `"${activity.activityName}" couldn't be scheduled this week — its exact time is no longer free.`,
   );
 
-  const { error: archiveError } = await supabase
-    .from("weekly_plans")
-    .update({ status: "archived" })
-    .eq("user_id", user.id)
-    .eq("week_start", result.weekStart)
-    .eq("status", "active");
-
-  if (archiveError) {
-    console.error("Failed to archive previous plan:", archiveError);
+  const { data: planId, error: persistError } = await supabase.rpc("replace_weekly_plan", {
+    p_week_start: result.weekStart,
+    p_expected_plan_id: currentPlanRow?.id ?? null,
+    p_locked_block_ids: lockedRows.map((row) => row.id),
+    p_warnings: unplacedFixedTimeWarnings,
+    p_blocks: result.blocks.map((block) => ({
+      activity_id: block.activityId,
+      scheduled_date: block.scheduledDate,
+      start_time: block.startTime,
+      end_time: block.endTime,
+      rationale: block.rationale,
+    })),
+  });
+  if (persistError || !planId) {
+    console.error("Failed to replace weekly plan transaction:", persistError);
     return { ok: false, message: GENERIC_ERROR_MESSAGE };
-  }
-
-  const { data: planRow, error: planError } = await supabase
-    .from("weekly_plans")
-    .insert({
-      user_id: user.id,
-      week_start: result.weekStart,
-      status: "active",
-      unplaced_fixed_time_warnings: unplacedFixedTimeWarnings.length > 0 ? unplacedFixedTimeWarnings : null,
-    })
-    .select("id")
-    .single();
-
-  if (planError) {
-    console.error("Failed to create weekly plan:", planError);
-    return { ok: false, message: GENERIC_ERROR_MESSAGE };
-  }
-
-  if (lockedRows.length > 0) {
-    const { error: relinkError } = await supabase
-      .from("scheduled_blocks")
-      .update({ weekly_plan_id: planRow.id })
-      .in(
-        "id",
-        lockedRows.map((row) => row.id),
-      );
-
-    if (relinkError) {
-      console.error("Failed to carry locked blocks into the new plan:", relinkError);
-      return { ok: false, message: GENERIC_ERROR_MESSAGE };
-    }
-  }
-
-  if (result.blocks.length > 0) {
-    const { error: blocksError } = await supabase.from("scheduled_blocks").insert(
-      result.blocks.map((block) => ({
-        weekly_plan_id: planRow.id,
-        activity_id: block.activityId,
-        scheduled_date: block.scheduledDate,
-        start_time: block.startTime,
-        end_time: block.endTime,
-        rationale: block.rationale,
-      })),
-    );
-
-    if (blocksError) {
-      console.error("Failed to insert scheduled blocks:", blocksError);
-      return { ok: false, message: GENERIC_ERROR_MESSAGE };
-    }
   }
 
   revalidatePath("/weekly-plan");
   revalidatePath("/dashboard");
 
-  return { ok: true, weeklyPlanId: planRow.id, blocksPlaced: result.blocks.length + lockedRows.length };
+  return { ok: true, weeklyPlanId: planId, blocksPlaced: result.blocks.length + lockedRows.length };
 }

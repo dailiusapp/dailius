@@ -77,26 +77,13 @@ export async function syncGoogleCalendarEvents(userId: string): Promise<SyncGoog
 
     const supabase = await createClient();
 
-    const { error: deleteError } = await supabase
-      .from("commitments")
-      .delete()
-      .eq("user_id", userId)
-      .eq("source", SOURCE)
-      .gte("start_time", weekStart.toISOString())
-      .lt("start_time", weekEnd.toISOString());
-
-    if (deleteError) throw deleteError;
-
-    if (rows.length > 0) {
-      const { error: insertError } = await supabase.from("commitments").insert(rows);
-      if (insertError) throw insertError;
-    }
-
-    const { error: syncedError } = await supabase
-      .from("google_calendar_connections")
-      .update({ last_synced_at: new Date().toISOString() })
-      .eq("user_id", userId);
-    if (syncedError) console.error("Failed to update last_synced_at:", syncedError);
+    const { error } = await supabase.rpc("replace_google_calendar_events", {
+      p_user_id: userId,
+      p_week_start: weekStart.toISOString(),
+      p_week_end: weekEnd.toISOString(),
+      p_events: rows,
+    });
+    if (error) throw error;
 
     return { ok: true, imported: rows.length };
   } catch (error) {

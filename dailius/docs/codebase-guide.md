@@ -98,9 +98,9 @@ call those services; domain scheduling rules belong outside components.
 
 `generatePlan.ts` optionally refreshes Google commitments, loads inputs via
 `loadEngineInputs.ts`, preserves accepted locked blocks, and calls
-`engine.ts:generateWeeklySchedule`. It archives the current week's active plan,
-creates another plan, relinks locked blocks, inserts newly generated blocks,
-and revalidates dashboard/weekly-plan pages.
+`engine.ts:generateWeeklySchedule`. The `replace_weekly_plan` RPC archives the current week's active plan,
+creates another plan, relinks locked blocks, and inserts newly generated blocks
+in one transaction. The service then revalidates dashboard/weekly-plan pages.
 
 The engine subtracts commitments and protected periods from availability, places
 fixed-time activities first, then considers goal priority, constrained days,
@@ -159,10 +159,11 @@ The loop limit is a constant of 3. Usage records count attempts in rolling
 
 These are observations to guide future work, not fixes made by this handoff.
 
-- Plan generation, onboarding completion and calendar replacement still perform
-  multiple database writes without a transaction. Replan confirmation now uses
-  an atomic RPC; deploy `20261107000000_atomic_confirm_replan.sql` before the
-  application change. See `docs/atomic-replan.md` for validation and rollout.
+- Replan acceptance, weekly plan replacement, onboarding completion, and Google
+  Calendar replacement now each use a transactional RPC. Onboarding completion
+  is idempotent after success. Deploy the associated migrations before application
+  changes; see `docs/atomic-replan.md` and `docs/atomic-writes.md`. Calendar sync,
+  onboarding completion, and initial plan generation remain separate transactions.
 - Fresh confirmation validation does not provide a transactional concurrency
   boundary or a persisted proposal lifecycle.
 - Initial weekly generation remains deterministic despite the refactoring
